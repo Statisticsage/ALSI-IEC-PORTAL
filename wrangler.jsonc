@@ -1,13 +1,21 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "alsi-iec-portal",
-  "compatibility_date": "2026-05-09",
-  "compatibility_flags": ["nodejs_compat"],
 
-  "services": [
-    {
-      "binding": "WORKER_SELF_REFERENCE",
-      "service": "alsi-iec-portal"
-    }
-  ]
+  "name": "iec-election-portal",
+
+  "main": ".open-next/worker.js",
+
+  "compatibility_date": "2026-05-09",
+
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+
+  "assets": {
+    "directory": ".open-next/assets"
+  },
+
+  "observability": {
+    "enabled": true
+  }
 }
