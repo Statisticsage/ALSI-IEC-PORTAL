@@ -4,6 +4,7 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { UNIVERSITIES, INDIAN_STATES } from "@/lib/constants";
 import FileUploadField from "@/components/forms/FileUploadField";
+import { notifyRegistration } from "@/lib/notify";
 import { VoterFormData } from "@/types";
 
 const INITIAL: VoterFormData = {
@@ -55,6 +56,14 @@ export default function VoterRegistrationPage() {
       }
 
       setMsg({ type: "success", text: "Voter registration submitted successfully. The IEC will verify your eligibility and notify you via email." });
+      notifyRegistration("voter", {
+        full_name: form.full_name,
+        university: form.university,
+        student_id: form.student_id,
+        passport_number: form.passport_number,
+        alsi_member_status: form.alsi_member_status,
+        email: form.email,
+      });
       setForm(INITIAL);
     } catch {
       setMsg({ type: "error", text: "Unexpected system error. Please try again." });

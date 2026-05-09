@@ -11,6 +11,8 @@ const NAV_LINKS = [
   { label: "Party Registration", href: "/register/party" },
   { label: "Check Status", href: "/status" },
 ];
+// Admin link intentionally removed from public navbar
+// Access: /iec-portal-2026 (IEC internal only)
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -42,16 +44,7 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
-          <Link
-            href="/admin"
-            className={`ml-2 rounded-lg border px-4 py-2 text-sm font-semibold transition ${
-              isAdmin
-                ? "border-[#0B1F3A] bg-[#0B1F3A] text-white"
-                : "border-slate-300 text-slate-700 hover:border-[#0B1F3A] hover:text-[#0B1F3A]"
-            }`}
-          >
-            IEC Admin
-          </Link>
+          {/* Admin link intentionally hidden from public navbar */}
         </nav>
 
         {/* MOBILE HAMBURGER */}
@@ -86,13 +79,7 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-            <Link
-              href="/admin"
-              onClick={() => setOpen(false)}
-              className="mt-2 rounded-lg border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-            >
-              IEC Admin Dashboard
-            </Link>
+            {/* Admin link intentionally hidden from mobile nav */}
           </nav>
         </div>
       )}
