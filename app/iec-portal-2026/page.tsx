@@ -5,181 +5,187 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 const MAX_ATTEMPTS = 3;
-const LOCKOUT_MINUTES = 30;
-// IEC alert recipients
-const ALERT_EMAILS = ["alsiiec048@gmail.com"];
+const LOCKOUT_MS = 30 * 60 * 1000; // 30 minutes
+const SESSION_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 export default function IECSecureLogin() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [locked, setLocked] = useState(false);
-  const [attemptsLeft, setAttemptsLeft] = useState(MAX_ATTEMPTS);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState("");
+  const [locked, setLocked]     = useState(false);
+  const [attempts, setAttempts] = useState(0);
 
-  // Check if already locked on mount
   useEffect(() => {
-    const lockUntil = localStorage.getItem("iec_lock_until");
-    if (lockUntil && Date.now() < parseInt(lockUntil)) {
-      setLocked(true);
-    }
-    // Check if already logged in
-    const session = sessionStorage.getItem("iec_admin");
-    if (session) router.replace("/admin/dashboard");
+    // Check existing lockout
+    try {
+      const lockUntil = localStorage.getItem("iec_lock_until");
+      if (lockUntil && Date.now() < parseInt(lockUntil)) {
+        setLocked(true);
+        return;
+      }
+      // Check if already logged in
+      const raw = sessionStorage.getItem("iec_admin");
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (s.expires_at && Date.now() < s.expires_at) {
+          router.replace("/admin/dashboard");
+        }
+      }
+    } catch { /* ignore */ }
   }, [router]);
 
-  async function sendAlertEmail(attemptedEmail: string, ip: string) {
-    // Fire alert via Supabase edge function or email API
-    // We log to audit_logs as a security alert — IEC checks this
+  async function getIP(): Promise<string> {
+    try {
+      const r = await fetch("https://api.ipify.org?format=json");
+      const d = await r.json();
+      return d.ip ?? "unknown";
+    } catch { return "unknown"; }
+  }
+
+  async function triggerAlert(attemptedEmail: string, ip: string) {
+    // Log to audit_logs — always works even if email fails
     await supabase.from("audit_logs").insert([{
       actor_name: attemptedEmail,
       actor_role: "unknown",
       action_type: "login",
       target_type: "system",
       target_id: "admin_portal",
-      description: `🚨 SECURITY ALERT: ${MAX_ATTEMPTS} failed login attempts detected from email "${attemptedEmail}" at IP ${ip}. Account access blocked for ${LOCKOUT_MINUTES} minutes. Immediate IEC review required.`,
+      description: `SECURITY ALERT: ${MAX_ATTEMPTS} failed login attempts from "${attemptedEmail}" IP: ${ip}. Portal locked 30 min.`,
       ip_address: ip,
     }]);
-
-    // Also call a serverless route that sends email
-    await fetch("/api/security-alert", {
+    // Fire email alert non-blocking
+    fetch("/api/security-alert", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         attempted_email: attemptedEmail,
         ip,
         timestamp: new Date().toISOString(),
-        alert_recipients: ALERT_EMAILS,
       }),
-    }).catch(() => {}); // non-blocking
-  }
-
-  async function getClientIP(): Promise<string> {
-    try {
-      const res = await fetch("https://api.ipify.org?format=json");
-      const data = await res.json();
-      return data.ip ?? "unknown";
-    } catch {
-      return "unknown";
-    }
+    }).catch(() => {});
   }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     if (locked) return;
-
     setError("");
     setLoading(true);
 
-    try {
-      const ip = await getClientIP();
+    const emailClean = email.trim().toLowerCase();
 
-      // Check failed attempts in DB
+    try {
+      const ip = await getIP();
+
+      // Step 1: Check DB failed attempts in last 30 min
       const { data: failCount } = await supabase.rpc("count_failed_attempts", {
-        input_email: email.trim(),
+        input_email: emailClean,
         input_ip: ip,
       });
 
       if ((failCount ?? 0) >= MAX_ATTEMPTS) {
-        const lockUntil = Date.now() + LOCKOUT_MINUTES * 60 * 1000;
-        localStorage.setItem("iec_lock_until", String(lockUntil));
+        localStorage.setItem("iec_lock_until", String(Date.now() + LOCKOUT_MS));
         setLocked(true);
-        await sendAlertEmail(email.trim(), ip);
+        await triggerAlert(emailClean, ip);
         return;
       }
 
-      // Verify password
+      // Step 2: Verify password via RPC
       const { data: valid, error: rpcErr } = await supabase.rpc(
         "verify_admin_password",
-        { input_email: email.trim(), input_password: password }
+        { input_email: emailClean, input_password: password }
       );
 
       if (rpcErr || !valid) {
         // Log failed attempt
         await supabase.from("login_attempts").insert([{
-          email: email.trim(),
+          email: emailClean,
           ip_address: ip,
           success: false,
         }]);
 
-        const remaining = MAX_ATTEMPTS - ((failCount ?? 0) + 1);
-        setAttemptsLeft(Math.max(0, remaining));
+        const newAttempts = attempts + 1;
+        setAttempts(newAttempts);
+        const remaining = MAX_ATTEMPTS - newAttempts;
 
         if (remaining <= 0) {
-          const lockUntil = Date.now() + LOCKOUT_MINUTES * 60 * 1000;
-          localStorage.setItem("iec_lock_until", String(lockUntil));
+          localStorage.setItem("iec_lock_until", String(Date.now() + LOCKOUT_MS));
           setLocked(true);
-          await sendAlertEmail(email.trim(), ip);
+          await triggerAlert(emailClean, ip);
           return;
         }
 
         setError(
           remaining === 1
-            ? "Incorrect credentials. This is your final attempt before access is locked and IEC is alerted."
+            ? "Incorrect credentials. Final attempt before access is locked and IEC is alerted."
             : `Incorrect credentials. ${remaining} attempt${remaining !== 1 ? "s" : ""} remaining.`
         );
         return;
       }
 
-      // SUCCESS — fetch admin profile
-      const { data: admin } = await supabase
+      // Step 3: Fetch admin profile — use LOWER() match
+      const { data: admins } = await supabase
         .from("admin_users")
         .select("id, full_name, role, email, is_active")
-        .ilike("email", email.trim())  // case-insensitive match
-        .eq("is_active", true)
-        .maybeSingle();
+        .ilike("email", emailClean);
+
+      const admin = admins?.[0];
 
       if (!admin) {
+        setError("Account not found. Contact the IEC Chairperson.");
+        return;
+      }
+
+      if (!admin.is_active) {
         setError("Account is inactive. Contact the IEC Chairperson.");
         return;
       }
 
-      // Log successful attempt
+      // Step 4: Log success
       await supabase.from("login_attempts").insert([{
-        email: email.trim(),
+        email: emailClean,
         ip_address: ip,
         success: true,
       }]);
 
-      // Update last_login
       await supabase.from("admin_users")
         .update({ last_login: new Date().toISOString() })
         .eq("id", admin.id);
 
-      // Log to audit
       await supabase.from("audit_logs").insert([{
         actor_name: admin.full_name,
         actor_role: admin.role,
         action_type: "login",
         target_type: "system",
         target_id: "admin_portal",
-        description: `Admin login successful from IP ${ip}`,
+        description: `Successful admin login from IP ${ip}`,
         ip_address: ip,
       }]);
 
-      // Store session with expiry (2 hours)
-      const session = {
+      // Step 5: Store session
+      sessionStorage.setItem("iec_admin", JSON.stringify({
         id: admin.id,
         full_name: admin.full_name,
         role: admin.role,
         email: admin.email,
-        expires_at: Date.now() + 2 * 60 * 60 * 1000,
-      };
-      sessionStorage.setItem("iec_admin", JSON.stringify(session));
+        expires_at: Date.now() + SESSION_MS,
+      }));
 
-      // Clear any lockout state
       localStorage.removeItem("iec_lock_until");
-
       router.push("/admin/dashboard");
-    } catch {
+
+    } catch (err) {
+      console.error(err);
       setError("System error. Please try again.");
     } finally {
       setLoading(false);
     }
   }
 
-  // LOCKED STATE
+  const attemptsLeft = MAX_ATTEMPTS - attempts;
+
+  // ── LOCKED SCREEN ──────────────────────────────────────
   if (locked) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-900 px-6">
@@ -191,21 +197,20 @@ export default function IECSecureLogin() {
           </div>
           <h1 className="text-xl font-bold text-white">Access Suspended</h1>
           <p className="mt-3 text-sm text-slate-400">
-            Too many failed login attempts have been detected. This access point has been temporarily suspended for {LOCKOUT_MINUTES} minutes.
+            Too many failed attempts. This portal has been suspended for 30 minutes.
           </p>
           <p className="mt-4 text-sm font-semibold text-red-400">
-            The IEC security team has been automatically notified.
+            The IEC has been automatically notified at alsiiec048@gmail.com
           </p>
           <p className="mt-6 text-xs text-slate-600">
-            All unauthorised access attempts are logged with IP address and timestamp.
-            Persistent attempts may result in further action under ALSI election regulations.
+            All access attempts are logged with IP address and timestamp.
           </p>
         </div>
       </main>
     );
   }
 
-  // LOGIN FORM
+  // ── LOGIN FORM ─────────────────────────────────────────
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-900 px-6">
       <div className="w-full max-w-md">
@@ -219,35 +224,31 @@ export default function IECSecureLogin() {
           </div>
           <h1 className="text-xl font-bold text-white">IEC Secure Portal</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Independent Elections Commission<br />
-            Authorised Personnel Only
+            Independent Elections Commission<br />Authorised Personnel Only
           </p>
         </div>
 
-        {/* WARNING BANNER */}
+        {/* WARNING */}
         <div className="mb-6 rounded-xl border border-red-800/40 bg-red-950/30 px-5 py-4 text-center">
           <p className="text-xs font-semibold uppercase tracking-widest text-red-400">
             ⚠ Restricted Access
           </p>
           <p className="mt-1.5 text-xs text-slate-400">
             This system is exclusively for authorised IEC administrators.
-            All login attempts — successful or not — are logged with IP address and timestamp.
-            Unauthorised access is a violation of ALSI election regulations.
+            All login attempts are logged with IP address and timestamp.
+            Unauthorised access violates ALSI election regulations.
           </p>
         </div>
 
         {/* ATTEMPTS INDICATOR */}
-        {attemptsLeft < MAX_ATTEMPTS && (
+        {attempts > 0 && (
           <div className="mb-4 rounded-xl border border-orange-700/40 bg-orange-950/30 px-5 py-3 text-center">
             <p className="text-sm font-semibold text-orange-400">
               {attemptsLeft} attempt{attemptsLeft !== 1 ? "s" : ""} remaining before lockout
             </p>
             <div className="mt-2 flex justify-center gap-1.5">
               {Array.from({ length: MAX_ATTEMPTS }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`h-1.5 w-8 rounded-full ${i < attemptsLeft ? "bg-orange-500" : "bg-slate-700"}`}
-                />
+                <div key={i} className={`h-1.5 w-8 rounded-full ${i < attemptsLeft ? "bg-orange-500" : "bg-slate-700"}`} />
               ))}
             </div>
           </div>
@@ -266,8 +267,8 @@ export default function IECSecureLogin() {
                 onChange={e => setEmail(e.target.value)}
                 required
                 autoComplete="off"
+                placeholder="Enter your official email"
                 className="w-full rounded-xl border border-slate-600 bg-slate-900 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                placeholder="official@iec.alsi"
               />
             </div>
 
@@ -281,8 +282,8 @@ export default function IECSecureLogin() {
                 onChange={e => setPassword(e.target.value)}
                 required
                 autoComplete="new-password"
-                className="w-full rounded-xl border border-slate-600 bg-slate-900 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 placeholder="••••••••••••"
+                className="w-full rounded-xl border border-slate-600 bg-slate-900 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
 
@@ -304,7 +305,7 @@ export default function IECSecureLogin() {
 
         <p className="mt-6 text-center text-xs text-slate-600">
           Session expires after 2 hours of inactivity.<br />
-          Locked out? Contact the IEC Chairperson directly.
+          Issues? Contact alsiiec048@gmail.com
         </p>
       </div>
     </main>
