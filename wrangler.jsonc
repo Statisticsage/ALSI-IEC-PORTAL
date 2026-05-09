@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
 
-  "name": "iec-election-portal",
+  "name": "alsi-iec-portal",
 
   "main": ".open-next/worker.js",
 
