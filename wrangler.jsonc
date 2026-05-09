@@ -1,11 +1,13 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
 
-  "name": "alsi-iec-portal",
+  "name": "alsi-election.org",
 
   "main": ".open-next/worker.js",
 
   "compatibility_date": "2026-05-09",
+  
+  "workers_dev": false,
 
   "compatibility_flags": [
     "nodejs_compat"
