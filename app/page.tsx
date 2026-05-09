@@ -146,8 +146,8 @@ export default function HomePage() {
                 (Ref: IEC/CPF/2026-003).
               </p>
               <div className="mt-6 text-sm text-slate-600">
-                <p>📧 Official IEC Email: <strong>alsiiec048@gmail.com</strong></p>
-                <p className="mt-1">🌐 Portal: <strong>https://iec.alsi-election-org.workers.dev</strong></p>
+                <p>Official IEC Email: <strong>alsiiec048@gmail.com</strong></p>
+                
               </div>
               <div className="mt-8 flex flex-wrap gap-4">
                 <Link href="/register/candidate"
