@@ -3,15 +3,10 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import {
-  POSITION_FEES,
-  POSITION_GPA_REQUIREMENTS,
-  POSITIONS,
-  UNIVERSITIES,
-  DEGREE_LEVELS,
-  SEMESTERS,
+  POSITION_FEES, POSITION_GPA_REQUIREMENTS,
+  POSITIONS, UNIVERSITIES, DEGREE_LEVELS, SEMESTERS,
 } from "@/lib/constants";
 import FileUploadField from "@/components/forms/FileUploadField";
-import { notifyRegistration } from "@/lib/notify";
 import type { CandidateFormData, CandidatePosition } from "@/types";
 
 const INITIAL: CandidateFormData = {
@@ -28,35 +23,9 @@ const INITIAL: CandidateFormData = {
 
 const inp = "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#0B1F3A] focus:ring-2 focus:ring-[#0B1F3A]/10";
 
-function Section({ title, subtitle, children }: {
-  title: string; subtitle?: string; children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="mb-6 border-b border-slate-100 pb-4">
-        <h3 className="text-lg font-bold text-[#0B1F3A]">{title}</h3>
-        {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Field({ label, required, className, children }: {
-  label: string; required?: boolean; className?: string; children: React.ReactNode;
-}) {
-  return (
-    <div className={className}>
-      <label className="mb-2 block text-sm font-medium text-slate-700">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-      {children}
-    </div>
-  );
-}
-
 export default function CandidateRegistrationForm() {
   const [form, setForm] = useState<CandidateFormData>(INITIAL);
+  const [uniOther, setUniOther] = useState("");
   const [msg, setMsg] = useState<{ type: "error" | "success"; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -65,21 +34,23 @@ export default function CandidateRegistrationForm() {
   const minGPA = POSITION_GPA_REQUIREMENTS[pos] ?? 0;
   const gpaOk = form.gpa > 0 && form.gpa >= minGPA;
 
-  function set<K extends keyof CandidateFormData>(field: K, value: CandidateFormData[K]) {
-    setForm((p: CandidateFormData) => ({ ...p, [field]: value }));
+  function set<K extends keyof CandidateFormData>(k: K, v: CandidateFormData[K]) {
+    setForm((p: CandidateFormData) => ({ ...p, [k]: v }));
   }
 
   function validate(): string | null {
+    const uni = form.university === "Other" ? uniOther.trim() : form.university;
+    if (!uni) return "Please select or enter your university.";
     if (form.gpa < minGPA)
       return `Minimum GPA for ${form.position_applied} is ${minGPA.toFixed(1)}. Your GPA: ${form.gpa}`;
     if (form.position_applied === "President" && form.years_in_india < 1)
       return "Presidential candidates must have resided in India for at least 1 year.";
-    if (!form.passport_url)          return "Passport copy upload is required.";
-    if (!form.transcript_url)        return "Academic transcript upload is required.";
-    if (!form.photo_url)             return "Passport photo upload is required.";
-    if (!form.signature_url)         return "Signature upload is required.";
-    if (!form.payment_url)           return "Payment proof upload is required.";
-    if (!form.letter_of_intent_url)  return "Letter of Intent upload is required.";
+    if (!form.passport_url)         return "Passport copy upload is required.";
+    if (!form.transcript_url)       return "Academic transcript upload is required.";
+    if (!form.photo_url)            return "Passport photo upload is required.";
+    if (!form.signature_url)        return "Signature upload is required.";
+    if (!form.payment_url)          return "Payment proof upload is required.";
+    if (!form.letter_of_intent_url) return "Letter of Intent upload is required.";
     return null;
   }
 
@@ -89,10 +60,13 @@ export default function CandidateRegistrationForm() {
     const err = validate();
     if (err) { setMsg({ type: "error", text: err }); return; }
 
+    const finalUniversity = form.university === "Other" ? uniOther.trim() : form.university;
+
     try {
       setSubmitting(true);
       const { error } = await supabase.from("candidates").insert([{
         ...form,
+        university: finalUniversity,
         status: "pending",
       }]);
 
@@ -101,21 +75,32 @@ export default function CandidateRegistrationForm() {
           return setMsg({ type: "error", text: "This passport number is already registered." });
         if (error.message.includes("email"))
           return setMsg({ type: "error", text: "This email address is already registered." });
-        return setMsg({ type: "error", text: "Submission failed. Please try again." });
+        return setMsg({ type: "error", text: "Submission failed: " + error.message });
       }
 
-      setMsg({ type: "success", text: "Application submitted successfully. The IEC will review your submission and notify you via email." });
-      notifyRegistration("candidate", {
-        full_name: form.full_name,
-        position_applied: form.position_applied,
-        university: form.university,
-        gpa: String(form.gpa),
-        email: form.email,
-        whatsapp: form.whatsapp,
-        application_id: "Auto-assigned by system",
-      });
+      // Non-blocking IEC notification
+      fetch("/api/notify-registration", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "candidate",
+          data: {
+            full_name: form.full_name,
+            position_applied: form.position_applied,
+            university: finalUniversity,
+            gpa: String(form.gpa),
+            email: form.email,
+            whatsapp: form.whatsapp,
+            application_id: "Auto-assigned by system",
+          },
+        }),
+      }).catch(() => {});
+
+      setMsg({ type: "success", text: `Application submitted successfully. Your application is now pending IEC review. You will be notified at ${form.email}.` });
       setForm(INITIAL);
-    } catch {
+      setUniOther("");
+    } catch (ex) {
+      console.error(ex);
       setMsg({ type: "error", text: "Unexpected system error. Please try again." });
     } finally {
       setSubmitting(false);
@@ -142,13 +127,13 @@ export default function CandidateRegistrationForm() {
             <input type="date" value={form.date_of_birth} onChange={e => set("date_of_birth", e.target.value)} required className={inp} />
           </Field>
           <Field label="Passport Number" required>
-            <input value={form.passport_number} onChange={e => set("passport_number", e.target.value.toUpperCase())} required className={inp} />
+            <input value={form.passport_number} onChange={e => set("passport_number", e.target.value.toUpperCase())} required className={inp} placeholder="e.g. A1234567" />
           </Field>
           <Field label="Email Address" required>
             <input type="email" value={form.email} onChange={e => set("email", e.target.value)} required className={inp} />
           </Field>
           <Field label="WhatsApp Number" required>
-            <input type="tel" value={form.whatsapp} onChange={e => set("whatsapp", e.target.value)} required className={inp} />
+            <input type="tel" value={form.whatsapp} onChange={e => set("whatsapp", e.target.value)} required className={inp} placeholder="+91..." />
           </Field>
           <Field label="Residential Address in India" required className="md:col-span-2">
             <textarea value={form.residential_address} onChange={e => set("residential_address", e.target.value)} required rows={2} className={inp} />
@@ -160,11 +145,15 @@ export default function CandidateRegistrationForm() {
       <Section title="Academic Information" subtitle="Provide your current academic details.">
         <div className="grid gap-6 md:grid-cols-2">
           <Field label="University" required>
-            <select value={form.university} onChange={e => set("university", e.target.value)} required className={inp}>
+            <select value={form.university} onChange={e => set("university", e.target.value as CandidateFormData["university"])} required className={inp}>
               <option value="">Select university</option>
               {UNIVERSITIES.map(u => <option key={u}>{u}</option>)}
-              <option value="Other">Other</option>
+              <option value="Other">Other (specify below)</option>
             </select>
+            {form.university === "Other" && (
+              <input value={uniOther} onChange={e => setUniOther(e.target.value)}
+                required placeholder="Enter your university name" className={`${inp} mt-2`} />
+            )}
           </Field>
           <Field label="Degree Level" required>
             <select value={form.degree_level} onChange={e => set("degree_level", e.target.value)} required className={inp}>
@@ -185,13 +174,13 @@ export default function CandidateRegistrationForm() {
             <input type="number" step="0.01" min="0" max="10"
               value={form.gpa || ""}
               onChange={e => set("gpa", parseFloat(e.target.value) || 0)}
-              required className={inp} />
+              required className={inp} placeholder="e.g. 7.5" />
           </Field>
           <Field label="Years Residing in India" required>
             <input type="number" step="0.5" min="0"
               value={form.years_in_india || ""}
               onChange={e => set("years_in_india", parseFloat(e.target.value) || 0)}
-              required className={inp} />
+              required className={inp} placeholder="e.g. 2" />
           </Field>
         </div>
       </Section>
@@ -200,29 +189,29 @@ export default function CandidateRegistrationForm() {
       <Section title="Electoral Details" subtitle="Select the position you are contesting.">
         <div className="grid gap-6 md:grid-cols-2">
           <Field label="Position Applied For" required>
-            <select
-              value={form.position_applied}
+            <select value={form.position_applied}
               onChange={e => set("position_applied", e.target.value as CandidatePosition)}
-              required className={inp}
-            >
+              required className={inp}>
               {POSITIONS.map(p => <option key={p}>{p}</option>)}
             </select>
           </Field>
           <Field label="Political Party (if any)">
-            <input value={form.political_party} onChange={e => set("political_party", e.target.value)}
+            <input value={form.political_party}
+              onChange={e => set("political_party", e.target.value)}
               placeholder="Leave blank if independent" className={inp} />
           </Field>
           <Field label="Running Mate (if applicable)">
-            <input value={form.running_mate} onChange={e => set("running_mate", e.target.value)}
+            <input value={form.running_mate}
+              onChange={e => set("running_mate", e.target.value)}
               placeholder="Full name of running mate" className={inp} />
           </Field>
         </div>
 
-        {/* FEE + GPA PANEL */}
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Registration Fee</p>
             <p className="mt-2 text-3xl font-bold text-[#0B1F3A]">INR {fee.toLocaleString()}</p>
+            <p className="mt-1 text-xs text-slate-500">Non-refundable. Pay before uploading proof.</p>
           </div>
           <div className={`rounded-2xl border p-5 ${gpaOk ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">GPA Requirement</p>
@@ -230,14 +219,14 @@ export default function CandidateRegistrationForm() {
               Min {minGPA.toFixed(1)}{form.gpa > 0 ? ` — Yours: ${form.gpa}` : ""}
             </p>
             <p className={`mt-1 text-xs font-medium ${gpaOk ? "text-green-600" : "text-red-500"}`}>
-              {form.gpa === 0 ? "Enter your GPA above" : gpaOk ? "✓ GPA requirement met" : "✗ GPA below minimum"}
+              {form.gpa === 0 ? "Enter your GPA in the academic section" : gpaOk ? "✓ GPA requirement met" : "✗ GPA below minimum — you are not eligible"}
             </p>
           </div>
         </div>
       </Section>
 
       {/* SECTION 4 — DOCUMENTS */}
-      <Section title="Verification Documents" subtitle="All documents required. PDF, PNG, JPG accepted — max 5MB each.">
+      <Section title="Verification Documents" subtitle="All 6 documents required. PDF, PNG, JPG accepted — max 5MB each.">
         <div className="grid gap-6 md:grid-cols-2">
           <FileUploadField label="Passport Copy" bucket="candidate-documents" folder="passports"
             onUpload={(url: string) => set("passport_url", url)} />
@@ -245,9 +234,11 @@ export default function CandidateRegistrationForm() {
             onUpload={(url: string) => set("transcript_url", url)} />
           <FileUploadField label="Passport Photo (recent)" bucket="candidate-documents" folder="photos"
             onUpload={(url: string) => set("photo_url", url)} />
-          <FileUploadField label="Signature" bucket="candidate-documents" folder="signatures"
+          <FileUploadField label="Signature (on plain white paper)" bucket="candidate-documents" folder="signatures"
             onUpload={(url: string) => set("signature_url", url)} />
-          <FileUploadField label={`Payment Proof — INR ${fee.toLocaleString()} (non-refundable)`} bucket="candidate-documents" folder="payments"
+          <FileUploadField
+            label={`Payment Proof — INR ${fee.toLocaleString()} (non-refundable)`}
+            bucket="candidate-documents" folder="payments"
             onUpload={(url: string) => set("payment_url", url)} />
           <FileUploadField label="Letter of Intent" bucket="candidate-documents" folder="letters"
             onUpload={(url: string) => set("letter_of_intent_url", url)} />
@@ -268,10 +259,10 @@ export default function CandidateRegistrationForm() {
       {/* DECLARATION */}
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
         <p className="text-sm leading-7 text-amber-900">
-          <strong>Declaration:</strong> By submitting this form, I confirm that all information and
-          documents provided are accurate and genuine. I understand that false declarations,
-          fraudulent documents, or incomplete submissions will result in immediate disqualification
-          and further IEC disciplinary action.
+          <strong>Declaration:</strong> By submitting this form, I confirm that all information and documents
+          provided are accurate and genuine. I understand that false declarations, fraudulent documents,
+          or incomplete submissions will result in immediate disqualification and further IEC disciplinary
+          action under IEC/CPF/2026-003.
         </p>
       </div>
 
@@ -283,5 +274,32 @@ export default function CandidateRegistrationForm() {
       </div>
 
     </form>
+  );
+}
+
+function Section({ title, subtitle, children }: {
+  title: string; subtitle?: string; children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mb-6 border-b border-slate-100 pb-4">
+        <h3 className="text-lg font-bold text-[#0B1F3A]">{title}</h3>
+        {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Field({ label, required, className, children }: {
+  label: string; required?: boolean; className?: string; children: React.ReactNode;
+}) {
+  return (
+    <div className={className}>
+      <label className="mb-2 block text-sm font-medium text-slate-700">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      {children}
+    </div>
   );
 }
