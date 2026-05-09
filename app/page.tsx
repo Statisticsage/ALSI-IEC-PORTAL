@@ -8,7 +8,7 @@ const timeline = [
   { date: "May 21",            title: "Final Approved Candidate List" },
   { date: "May 22 – May 28",   title: "Official Campaign Period" },
   { date: "May 30",            title: "VOTING DAY" },
-  { date: "May 31",            title: "Official Results Declaration" },
+  { date: "May 30",            title: "Official Results Declaration" },
 ];
 
 const services = [
