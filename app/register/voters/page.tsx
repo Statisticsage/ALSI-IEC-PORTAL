@@ -33,10 +33,9 @@ export default function VoterRegistrationPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-
     const err = validate();
     if (err) { setMsg({ type: "error", text: err }); return; }
-
+ 
     try {
       setSubmitting(true);
       const { error } = await supabase.from("voters").insert([{
@@ -44,34 +43,43 @@ export default function VoterRegistrationPage() {
         voter_approved: false,
         verification_status: "pending",
       }]);
-
+ 
       if (error) {
+        console.error("Voter insert error:", error);
         if (error.message.includes("passport_number"))
           return setMsg({ type: "error", text: "This passport number is already registered." });
         if (error.message.includes("email"))
           return setMsg({ type: "error", text: "This email address is already registered." });
         if (error.message.includes("student_id"))
           return setMsg({ type: "error", text: "This student ID is already registered." });
-        return setMsg({ type: "error", text: "Registration failed. Please try again." });
+        return setMsg({ type: "error", text: `Registration failed: ${error.message}` });
       }
-
+ 
       setMsg({ type: "success", text: "Voter registration submitted successfully. The IEC will verify your eligibility and notify you via email." });
-      notifyRegistration("voter", {
-        full_name: form.full_name,
-        university: form.university,
-        student_id: form.student_id,
-        passport_number: form.passport_number,
-        alsi_member_status: form.alsi_member_status,
-        email: form.email,
-      });
+ 
+      // Fire-and-forget
+      try {
+        notifyRegistration("voter", {
+          full_name: form.full_name,
+          university: form.university,
+          student_id: form.student_id,
+          passport_number: form.passport_number,
+          alsi_member_status: form.alsi_member_status,
+          email: form.email,
+        });
+      } catch (notifyErr) {
+        console.warn("Notification failed (non-critical):", notifyErr);
+      }
+ 
       setForm(INITIAL);
-    } catch {
-      setMsg({ type: "error", text: "Unexpected system error. Please try again." });
+    } catch (err) {
+      console.error("Unexpected error:", err);
+      setMsg({ type: "error", text: `Unexpected system error: ${err instanceof Error ? err.message : String(err)}` });
     } finally {
       setSubmitting(false);
     }
   }
-
+ 
   return (
     <main className="min-h-screen bg-slate-50 py-12">
       <div className="mx-auto max-w-4xl px-6">

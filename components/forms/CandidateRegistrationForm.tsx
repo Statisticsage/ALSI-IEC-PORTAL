@@ -83,45 +83,54 @@ export default function CandidateRegistrationForm() {
     return null;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+ async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
     const err = validate();
     if (err) { setMsg({ type: "error", text: err }); return; }
-
+ 
     try {
       setSubmitting(true);
       const { error } = await supabase.from("candidates").insert([{
         ...form,
         status: "pending",
       }]);
-
+ 
       if (error) {
+        console.error("Candidate insert error:", error);
         if (error.message.includes("passport_number"))
           return setMsg({ type: "error", text: "This passport number is already registered." });
         if (error.message.includes("email"))
           return setMsg({ type: "error", text: "This email address is already registered." });
-        return setMsg({ type: "error", text: "Submission failed. Please try again." });
+        return setMsg({ type: "error", text: `Submission failed: ${error.message}` });
       }
-
+ 
       setMsg({ type: "success", text: "Application submitted successfully. The IEC will review your submission and notify you via email." });
-      notifyRegistration("candidate", {
-        full_name: form.full_name,
-        position_applied: form.position_applied,
-        university: form.university,
-        gpa: String(form.gpa),
-        email: form.email,
-        whatsapp: form.whatsapp,
-        application_id: "Auto-assigned by system",
-      });
+      
+      // Fire-and-forget — never block or crash the form
+      try {
+        notifyRegistration("candidate", {
+          full_name: form.full_name,
+          position_applied: form.position_applied,
+          university: form.university,
+          gpa: String(form.gpa),
+          email: form.email,
+          whatsapp: form.whatsapp,
+          application_id: "Auto-assigned by system",
+        });
+      } catch (notifyErr) {
+        console.warn("Notification failed (non-critical):", notifyErr);
+      }
+ 
       setForm(INITIAL);
-    } catch {
-      setMsg({ type: "error", text: "Unexpected system error. Please try again." });
+    } catch (err) {
+      console.error("Unexpected error:", err);
+      setMsg({ type: "error", text: `Unexpected system error: ${err instanceof Error ? err.message : String(err)}` });
     } finally {
       setSubmitting(false);
     }
   }
-
+ 
   return (
     <form onSubmit={handleSubmit} className="grid gap-8">
 

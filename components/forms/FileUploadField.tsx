@@ -7,7 +7,7 @@ interface Props {
   label: string;
   bucket: string;
   folder: string;
-  accept?: string; // defaults to pdf,png,jpg,jpeg
+  accept?: string;
   onUpload: (url: string) => void;
 }
 
@@ -26,9 +26,7 @@ export default function FileUploadField({
   accept = ".pdf,.png,.jpg,.jpeg",
   onUpload,
 }: Props) {
-  const [status, setStatus] = useState<
-    "idle" | "uploading" | "done" | "error"
-  >("idle");
+  const [status, setStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [msg, setMsg] = useState("");
   const [fileName, setFileName] = useState("");
 
@@ -39,14 +37,12 @@ export default function FileUploadField({
     setMsg("");
     setStatus("idle");
 
-    // Validate type
     if (!ALLOWED_TYPES.includes(file.type)) {
       setMsg("Only PDF, PNG, JPG or JPEG files are allowed.");
       setStatus("error");
       return;
     }
 
-    // Validate size
     if (file.size > MAX_SIZE) {
       setMsg("File size must not exceed 5MB.");
       setStatus("error");
@@ -63,18 +59,40 @@ export default function FileUploadField({
         .from(bucket)
         .upload(path, file, { cacheControl: "3600", upsert: false });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error("Upload error:", uploadError);
+        throw new Error(uploadError.message);
+      }
 
-      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+      // Use getPublicUrl (works now that buckets are public)
+      // Falls back to signed URL if public URL is empty
+      const { data: publicData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(path);
 
-      onUpload(data.publicUrl);
+      let finalUrl = publicData?.publicUrl;
+
+      // Fallback: create signed URL valid for 10 years if public URL fails
+      if (!finalUrl || finalUrl.includes("undefined")) {
+        const { data: signedData, error: signedError } = await supabase.storage
+          .from(bucket)
+          .createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+
+        if (signedError || !signedData?.signedUrl) {
+          throw new Error("Could not generate file URL after upload.");
+        }
+        finalUrl = signedData.signedUrl;
+      }
+
+      onUpload(finalUrl);
       setFileName(file.name);
       setStatus("done");
       setMsg("Uploaded successfully.");
-    } catch (err) {
-      console.error(err);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      console.error("FileUploadField error:", message);
       setStatus("error");
-      setMsg("Upload failed. Please try again.");
+      setMsg(`Upload failed: ${message}`);
     }
   }
 
@@ -113,8 +131,8 @@ export default function FileUploadField({
           >
             {status === "uploading" ? (
               <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
               </svg>
             ) : status === "done" ? (
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -135,19 +153,13 @@ export default function FileUploadField({
                 ? fileName
                 : "Click to upload or drag file here"}
             </p>
-            <p className="mt-0.5 text-xs text-slate-500">
-              PDF, PNG, JPG — max 5MB
-            </p>
+            <p className="mt-0.5 text-xs text-slate-500">PDF, PNG, JPG — max 5MB</p>
           </div>
         </div>
       </div>
 
       {msg && (
-        <p
-          className={`mt-2 text-xs font-medium ${
-            status === "done" ? "text-green-600" : "text-red-600"
-          }`}
-        >
+        <p className={`mt-2 text-xs font-medium ${status === "done" ? "text-green-600" : "text-red-600"}`}>
           {msg}
         </p>
       )}
