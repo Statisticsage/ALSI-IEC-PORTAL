@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 const MAX_ATTEMPTS = 3;
 const LOCKOUT_MINUTES = 30;
 // IEC alert recipients
-const ALERT_EMAILS = ["samwuor86@gmail.com", "Baysahjames518@gmail.com"];
+const ALERT_EMAILS = ["alsiiec048@gmail.com"];
 
 export default function IECSecureLogin() {
   const router = useRouter();
@@ -126,7 +126,7 @@ export default function IECSecureLogin() {
       const { data: admin } = await supabase
         .from("admin_users")
         .select("id, full_name, role, email, is_active")
-        .eq("email", email.trim())
+        .ilike("email", email.trim())  // case-insensitive match
         .eq("is_active", true)
         .maybeSingle();
 
