@@ -4,8 +4,7 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { UNIVERSITIES, INDIAN_STATES } from "@/lib/constants";
 import FileUploadField from "@/components/forms/FileUploadField";
-import { notifyRegistration } from "@/lib/notify";
-import { VoterFormData } from "@/types";
+import type { VoterFormData } from "@/types";
 
 const INITIAL: VoterFormData = {
   full_name: "", email: "", whatsapp: "",
@@ -15,16 +14,24 @@ const INITIAL: VoterFormData = {
   passport_url: "", student_id_url: "",
 };
 
+const inp = "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#0B1F3A] focus:ring-2 focus:ring-[#0B1F3A]/10";
+
 export default function VoterRegistrationPage() {
   const [form, setForm] = useState<VoterFormData>(INITIAL);
+  const [uniOther, setUniOther] = useState("");
+  const [stateOther, setStateOther] = useState("");
   const [msg, setMsg] = useState<{ type: "error" | "success"; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  function set(field: keyof VoterFormData, value: string) {
-    setForm(p => ({ ...p, [field]: value }));
+  function set<K extends keyof VoterFormData>(k: K, v: VoterFormData[K]) {
+    setForm(p => ({ ...p, [k]: v }));
   }
 
   function validate(): string | null {
+    const uni = form.university === "Other" ? uniOther.trim() : form.university;
+    const state = form.current_state === "Other" ? stateOther.trim() : form.current_state;
+    if (!uni) return "Please enter your university name.";
+    if (!state) return "Please enter your current state in India.";
     if (!form.passport_url) return "Passport copy upload is required.";
     if (!form.student_id_url) return "Student ID upload is required.";
     return null;
@@ -35,15 +42,23 @@ export default function VoterRegistrationPage() {
     setMsg(null);
     const err = validate();
     if (err) { setMsg({ type: "error", text: err }); return; }
- 
+
+    const finalUniversity = form.university === "Other" ? uniOther.trim() : form.university;
+    const finalState = form.current_state === "Other" ? stateOther.trim() : form.current_state;
+
     try {
       setSubmitting(true);
-      const { error } = await supabase.from("voters").insert([{
+
+      const payload = {
         ...form,
+        university: finalUniversity,
+        current_state: finalState,
         voter_approved: false,
         verification_status: "pending",
-      }]);
- 
+      };
+
+      const { error } = await supabase.from("voters").insert([payload]);
+
       if (error) {
         console.error("Voter insert error:", error);
         if (error.message.includes("passport_number"))
@@ -54,57 +69,55 @@ export default function VoterRegistrationPage() {
           return setMsg({ type: "error", text: "This student ID is already registered." });
         return setMsg({ type: "error", text: `Registration failed: ${error.message}` });
       }
- 
-      setMsg({ type: "success", text: "Voter registration submitted successfully. The IEC will verify your eligibility and notify you via email." });
- 
-      // Fire-and-forget
-      try {
-        notifyRegistration("voter", {
-          full_name: form.full_name,
-          university: form.university,
-          student_id: form.student_id,
-          passport_number: form.passport_number,
-          alsi_member_status: form.alsi_member_status,
-          email: form.email,
-        });
-      } catch (notifyErr) {
-        console.warn("Notification failed (non-critical):", notifyErr);
-      }
- 
+
+      // Non-blocking notification — never fails the submission
+      fetch("/api/notify-registration", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "voter",
+          data: {
+            full_name: form.full_name,
+            university: finalUniversity,
+            student_id: form.student_id,
+            passport_number: form.passport_number,
+            alsi_member_status: form.alsi_member_status,
+            email: form.email,
+          },
+        }),
+      }).catch(() => {});
+
+      setMsg({ type: "success", text: "Voter registration submitted successfully. The IEC will verify your eligibility and notify you via email at " + form.email });
       setForm(INITIAL);
-    } catch (err) {
-      console.error("Unexpected error:", err);
-      setMsg({ type: "error", text: `Unexpected system error: ${err instanceof Error ? err.message : String(err)}` });
+      setUniOther("");
+      setStateOther("");
+    } catch (ex) {
+      console.error(ex);
+      setMsg({ type: "error", text: "Unexpected system error. Please try again." });
     } finally {
       setSubmitting(false);
     }
   }
- 
+
   return (
     <main className="min-h-screen bg-slate-50 py-12">
       <div className="mx-auto max-w-4xl px-6">
-        <div className="mb-10">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#153E75]">
-            IEC Voter Portal
-          </p>
-          <h1 className="mt-3 text-4xl font-bold tracking-tight text-[#0B1F3A]">
-            Voter Registration
-          </h1>
+        <div className="mb-8">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#153E75]">IEC Voter Portal</p>
+          <h1 className="mt-3 text-4xl font-bold tracking-tight text-[#0B1F3A]">Voter Registration</h1>
           <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-600">
-            Official voter eligibility registration for the 2026/2027 ALSI General Election.
-            Only verified ALSI members will be approved to vote.
+            Official voter eligibility registration for the 2026/2027 ALSI General Election. Only verified ALSI members will be approved to vote.
           </p>
         </div>
 
-        {/* ELIGIBILITY NOTICE */}
-        <div className="mb-8 rounded-2xl border border-blue-200 bg-blue-50 p-5">
+        <div className="mb-6 rounded-2xl border border-blue-200 bg-blue-50 p-5">
           <p className="text-sm font-semibold text-[#0B1F3A]">Voter Eligibility Requirements</p>
           <ul className="mt-3 grid gap-1 text-sm text-slate-700 md:grid-cols-2">
             <li>✓ Must be a verified ALSI member in good standing</li>
-            <li>✓ Must be a currently enrolled student in India</li>
+            <li>✓ Must be currently enrolled in India</li>
             <li>✓ Valid passport required for identity verification</li>
             <li>✓ Valid student ID required for enrollment verification</li>
-            <li>✓ Only one registration per person — duplicates will be rejected</li>
+            <li>✓ One registration per person — duplicates will be rejected</li>
             <li>✓ IEC verification and approval required before voting</li>
           </ul>
         </div>
@@ -121,7 +134,7 @@ export default function VoterRegistrationPage() {
                 <input type="email" value={form.email} onChange={e => set("email", e.target.value)} required className={inp} />
               </Field>
               <Field label="WhatsApp Number" required>
-                <input type="tel" value={form.whatsapp} onChange={e => set("whatsapp", e.target.value)} required className={inp} placeholder="+91..." />
+                <input type="tel" value={form.whatsapp} onChange={e => set("whatsapp", e.target.value)} required placeholder="+91..." className={inp} />
               </Field>
               <Field label="Passport Number" required>
                 <input value={form.passport_number} onChange={e => set("passport_number", e.target.value.toUpperCase())} required className={inp} />
@@ -133,20 +146,27 @@ export default function VoterRegistrationPage() {
           <Section title="Academic Information" subtitle="Your current enrollment details in India.">
             <div className="grid gap-6 md:grid-cols-2">
               <Field label="University" required>
-                <select value={form.university} onChange={e => set("university", e.target.value)} required className={inp}>
+                <select value={form.university} onChange={e => set("university", e.target.value as VoterFormData["university"])} required className={inp}>
                   <option value="">Select university</option>
                   {UNIVERSITIES.map(u => <option key={u}>{u}</option>)}
-                  <option value="Other">Other</option>
+                  <option value="Other">Other (specify below)</option>
                 </select>
+                {form.university === "Other" && (
+                  <input value={uniOther} onChange={e => setUniOther(e.target.value)} required placeholder="Enter your university name" className={`${inp} mt-2`} />
+                )}
               </Field>
               <Field label="Student ID Number" required>
                 <input value={form.student_id} onChange={e => set("student_id", e.target.value)} required className={inp} />
               </Field>
               <Field label="Current State in India" required>
-                <select value={form.current_state} onChange={e => set("current_state", e.target.value)} required className={inp}>
+                <select value={form.current_state} onChange={e => set("current_state", e.target.value as VoterFormData["current_state"])} required className={inp}>
                   <option value="">Select state</option>
                   {INDIAN_STATES.map(s => <option key={s}>{s}</option>)}
+                  <option value="Other">Other (specify below)</option>
                 </select>
+                {form.current_state === "Other" && (
+                  <input value={stateOther} onChange={e => setStateOther(e.target.value)} required placeholder="Enter your current state" className={`${inp} mt-2`} />
+                )}
               </Field>
               <Field label="ALSI Membership Status" required>
                 <select value={form.alsi_member_status} onChange={e => set("alsi_member_status", e.target.value as VoterFormData["alsi_member_status"])} required className={inp}>
@@ -161,33 +181,19 @@ export default function VoterRegistrationPage() {
           {/* DOCUMENTS */}
           <Section title="Verification Documents" subtitle="Both documents required. PDF, PNG, JPG accepted — max 5MB each.">
             <div className="grid gap-6 md:grid-cols-2">
-              <FileUploadField
-                label="Passport Copy"
-                bucket="voter-documents"
-                folder="passports"
-                onUpload={url => set("passport_url", url)}
-              />
-              <FileUploadField
-                label="Student ID Card"
-                bucket="voter-documents"
-                folder="student-ids"
-                onUpload={url => set("student_id_url", url)}
-              />
+              <FileUploadField label="Passport Copy" bucket="voter-documents" folder="passports"
+                onUpload={(url: string) => set("passport_url", url)} />
+              <FileUploadField label="Student ID Card" bucket="voter-documents" folder="student-ids"
+                onUpload={(url: string) => set("student_id_url", url)} />
             </div>
           </Section>
 
-          {/* MESSAGE */}
           {msg && (
             <div className={`rounded-xl border p-4 text-sm font-medium ${
-              msg.type === "success"
-                ? "border-green-200 bg-green-50 text-green-800"
-                : "border-red-200 bg-red-50 text-red-700"
-            }`}>
-              {msg.text}
-            </div>
+              msg.type === "success" ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-700"
+            }`}>{msg.text}</div>
           )}
 
-          {/* DECLARATION */}
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
             <p className="text-sm leading-7 text-amber-900">
               <strong>Declaration:</strong> By submitting this form, I confirm that I am a legitimate ALSI member, currently enrolled in an academic institution in India, and that all information and documents provided are accurate and genuine. I understand that false declarations will result in disqualification.
@@ -195,18 +201,16 @@ export default function VoterRegistrationPage() {
           </div>
 
           <div className="flex justify-end">
-            <button type="submit" disabled={submitting} className="rounded-xl bg-[#0B1F3A] px-10 py-4 text-sm font-semibold text-white transition hover:bg-[#153E75] disabled:cursor-not-allowed disabled:opacity-60">
+            <button type="submit" disabled={submitting}
+              className="rounded-xl bg-[#0B1F3A] px-10 py-4 text-sm font-semibold text-white transition hover:bg-[#153E75] disabled:cursor-not-allowed disabled:opacity-60">
               {submitting ? "Submitting Registration..." : "Submit Voter Registration"}
             </button>
           </div>
-
         </form>
       </div>
     </main>
   );
 }
-
-const inp = "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#0B1F3A] focus:ring-2 focus:ring-[#0B1F3A]/10";
 
 function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
