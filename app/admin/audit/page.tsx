@@ -142,7 +142,7 @@ export default function AuditLogPage() {
                   return (
                     <tr key={log.id} className={`hover:bg-slate-50 ${isSecurity ? "bg-red-50" : ""}`}>
                       <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
-                        {formatDateTime(log.timestamp)}
+                        {formatDateTime(log.created_at)}
                       </td>
                       <td className="px-4 py-3 font-medium text-[#0B1F3A] whitespace-nowrap">
                         {isSecurity && <span className="mr-1">🚨</span>}
@@ -222,7 +222,7 @@ export default function AuditLogPage() {
 
             <div className="grid gap-4 rounded-xl bg-slate-50 p-5">
               {[
-                ["Timestamp", formatDateTime(selected.timestamp)],
+                ["Timestamp", formatDateTime(selected.created_at)],
                 ["Actor", selected.actor_name],
                 ["Role", selected.actor_role.replace(/_/g, " ")],
                 ["Action", selected.action_type.replace(/_/g, " ").toUpperCase()],

@@ -1,7 +1,11 @@
 // ============================================================
 // IEC DIGITAL REGISTRATION PORTAL — TYPE DEFINITIONS
-// Aligned to datawarehouse Supabase schema
+// Aligned to datawarehouse Supabase schema (xkcfpfbjezpwgdcestbi)
 // ============================================================
+
+// -------------------------------------------------------
+// ENUMS / UNION TYPES
+// -------------------------------------------------------
 
 export type CandidatePosition =
   | "President"
@@ -35,6 +39,7 @@ export type ALSIMemberStatus =
 // -------------------------------------------------------
 // CANDIDATE — matches candidates table exactly
 // -------------------------------------------------------
+
 export interface CandidateFormData {
   full_name: string;
   gender: string;
@@ -52,13 +57,15 @@ export interface CandidateFormData {
   position_applied: CandidatePosition;
   political_party: string;
   running_mate: string;
-  // document URLs — set after upload
+  // document URLs — populated after upload
   passport_url: string;
   transcript_url: string;
   photo_url: string;
   signature_url: string;
   payment_url: string;
   letter_of_intent_url: string;
+  // payment verification
+  transaction_id: string;
 }
 
 export interface Candidate extends CandidateFormData {
@@ -73,6 +80,7 @@ export interface Candidate extends CandidateFormData {
 // -------------------------------------------------------
 // VOTER — matches voters table exactly
 // -------------------------------------------------------
+
 export interface VoterFormData {
   full_name: string;
   email: string;
@@ -82,7 +90,7 @@ export interface VoterFormData {
   passport_number: string;
   current_state: string;
   alsi_member_status: ALSIMemberStatus;
-  // document URLs — set after upload
+  // document URLs — populated after upload
   passport_url: string;
   student_id_url: string;
 }
@@ -92,6 +100,8 @@ export interface Voter extends VoterFormData {
   voter_id_number: string;
   verification_status: ApplicationStatus;
   voter_approved: boolean;
+  has_voted: boolean;
+  voted_at: string | null;
   admin_notes: string | null;
   submitted_at: string;
   updated_at: string;
@@ -100,6 +110,7 @@ export interface Voter extends VoterFormData {
 // -------------------------------------------------------
 // POLITICAL PARTY — matches political_parties table exactly
 // -------------------------------------------------------
+
 export interface PartyFormData {
   party_name: string;
   acronym: string;
@@ -109,9 +120,11 @@ export interface PartyFormData {
   contact_email: string;
   whatsapp: string;
   description: string;
-  // document URLs — set after upload
+  // document URLs — populated after upload
   symbol_url: string;
   payment_proof_url: string;
+  // payment verification
+  transaction_id: string;
 }
 
 export interface PoliticalParty extends PartyFormData {
@@ -125,6 +138,7 @@ export interface PoliticalParty extends PartyFormData {
 // -------------------------------------------------------
 // ADMIN USER — matches admin_users table exactly
 // -------------------------------------------------------
+
 export interface AdminUser {
   id: string;
   full_name: string;
@@ -138,22 +152,46 @@ export interface AdminUser {
 // -------------------------------------------------------
 // AUDIT LOG — matches audit_logs table exactly
 // -------------------------------------------------------
+
+export type AuditActionType =
+  | "approve_candidate"
+  | "reject_candidate"
+  | "approve_voter"
+  | "reject_voter"
+  | "approve_party"
+  | "reject_party"
+  | "request_correction"
+  | "update"
+  | "create"
+  | "delete"
+  | "export"
+  | "login"
+  | "logout";
+
+export type AuditTargetType =
+  | "candidate"
+  | "voter"
+  | "political_party"
+  | "admin_user"
+  | "system";
+
 export interface AuditLog {
   id: string;
   actor_id: string | null;
   actor_name: string;
   actor_role: string;
-  action_type: "approve" | "reject" | "request_info" | "update" | "create" | "delete" | "export" | "login" | "logout";
-  target_type: "candidate" | "voter" | "political_party" | "admin_user" | "system";
+  action_type: AuditActionType;
+  target_type: AuditTargetType;
   target_id: string | null;
   description: string;
   ip_address: string | null;
-  timestamp: string;
+  created_at: string;
 }
 
 // -------------------------------------------------------
 // DASHBOARD STATS
 // -------------------------------------------------------
+
 export interface DashboardStats {
   total_candidates: number;
   pending_candidates: number;

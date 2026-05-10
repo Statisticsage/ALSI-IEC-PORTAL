@@ -11,7 +11,7 @@ const INITIAL: PartyFormData = {
   party_name: "", acronym: "", motto: "",
   chairperson_name: "", secretary_general_name: "",
   contact_email: "", whatsapp: "", description: "",
-  symbol_url: "", payment_proof_url: "",
+  symbol_url: "", payment_proof_url: "", transaction_id: "",
 };
 
 export default function PartyRegistrationForm() {
