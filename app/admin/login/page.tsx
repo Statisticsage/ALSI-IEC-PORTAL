@@ -16,49 +16,56 @@ export default function AdminLoginPage() {
     setError("");
     setLoading(true);
 
+    // Clear any existing session from storage immediately
+    sessionStorage.clear();
+    localStorage.clear();
+
     try {
-      // Fetch admin user by email
-      const { data: admin, error: fetchErr } = await supabase
-        .from("admin_users")
-        .select("id, full_name, role, email, password_hash, is_active")
-        .eq("email", email.trim())
-        .eq("is_active", true)
-        .maybeSingle();
-
-      if (fetchErr || !admin) {
-        setError("Invalid credentials. Access denied.");
-        return;
-      }
-
-      // Verify password using pgcrypto crypt() via RPC
-      const { data: valid, error: rpcErr } = await supabase.rpc(
+      // ── STEP 1: Verify credentials server-side ──────────────────
+      // Returns jsonb: { valid, id, email, full_name, role, permissions }
+      const { data: result, error: rpcErr } = await supabase.rpc(
         "verify_admin_password",
-        { input_email: email.trim(), input_password: password }
+        {
+          input_email:    email.trim().toLowerCase(),
+          input_password: password,
+        }
       );
 
-      if (rpcErr || !valid) {
+      if (rpcErr || !result?.valid) {
         setError("Invalid credentials. Access denied.");
+        setLoading(false);
         return;
       }
 
-      // Store session in sessionStorage
-      sessionStorage.setItem(
-        "iec_admin",
-        JSON.stringify({
-          id: admin.id,
-          full_name: admin.full_name,
-          role: admin.role,
-          email: admin.email,
-        })
+      // ── STEP 2: Create server-side session, kill all old ones ───
+      // Every login destroys all previous sessions first.
+      const { data: token, error: sessionErr } = await supabase.rpc(
+        "create_admin_session",
+        {
+          p_admin_id:    result.id,
+          p_admin_email: result.email,
+          p_admin_role:  result.role,
+          p_ip_address:  null,
+        }
       );
 
-      // Update last_login
-      await supabase
-        .from("admin_users")
-        .update({ last_login: new Date().toISOString() })
-        .eq("id", admin.id);
+      if (sessionErr || !token) {
+        setError("Session creation failed. Please try again.");
+        setLoading(false);
+        return;
+      }
 
+      // ── STEP 3: Store ONLY the token + email in sessionStorage ──
+      // NEVER store the full admin object — that's what the hacker
+      // exploited. Token is a 64-char random hex string that means
+      // nothing without the DB. Injecting it from console does nothing
+      // because it also requires a matching DB row that expires.
+      sessionStorage.setItem("iec_token", token);
+      sessionStorage.setItem("iec_email", result.email);
+
+      // ── STEP 4: Navigate to dashboard ───────────────────────────
       router.push("/admin/dashboard");
+
     } catch {
       setError("System error. Please try again.");
     } finally {
@@ -86,7 +93,7 @@ export default function AdminLoginPage() {
           <form onSubmit={handleLogin} className="grid gap-5">
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">
-                Official Email Address
+                Official IEC Email
               </label>
               <input
                 type="email"
@@ -101,7 +108,7 @@ export default function AdminLoginPage() {
 
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">
-                Password
+                Secure Password
               </label>
               <input
                 type="password"

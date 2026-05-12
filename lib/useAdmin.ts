@@ -1,58 +1,99 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { AdminRole } from "@/types";
+import { supabase } from "@/lib/supabase";
 
-export interface AdminSession {
-  id: string;
-  full_name: string;
-  role: AdminRole;
-  email: string;
+export interface AdminUser {
+  id:          string;
+  email:       string;
+  full_name:   string;
+  role:        string;
+  permissions: Record<string, boolean>;
+}
+
+export function roleLabel(role: string): string {
+  const labels: Record<string, string> = {
+    secretary_general: "Secretary General",
+    chairperson:       "IEC Chairperson",
+    commissioner:      "IEC Commissioner",
+  };
+  return labels[role] ?? role;
 }
 
 export function useAdmin() {
-  const router = useRouter();
-  const [admin, setAdmin] = useState<AdminSession | null>(null);
+  const router  = useRouter();
+  const [admin,   setAdmin]   = useState<AdminUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const raw = sessionStorage.getItem("iec_admin");
-    if (!raw) {
-      router.replace("/iec-portal-2026");
-      return;
+  const logout = useCallback(async () => {
+    const token = sessionStorage.getItem("iec_token");
+
+    // Invalidate token server-side
+    if (token) {
+      await supabase.rpc("invalidate_admin_session", { p_token: token });
     }
-    try {
-      const session = JSON.parse(raw);
-      // Enforce 2-hour session expiry
-      if (session.expires_at && Date.now() > session.expires_at) {
-        sessionStorage.removeItem("iec_admin");
-        router.replace("/iec-portal-2026");
-        return;
-      }
-      setAdmin(session);
-    } catch {
-      router.replace("/iec-portal-2026");
-    } finally {
-      setLoading(false);
-    }
+
+    // Wipe ALL storage — no trace left for console injection
+    sessionStorage.clear();
+    localStorage.clear();
+
+    setAdmin(null);
+    router.replace("/admin/login");
   }, [router]);
 
-  function logout() {
-    sessionStorage.removeItem("iec_admin");
-    router.replace("/iec-portal-2026");
-  }
+  useEffect(() => {
+    let cancelled = false;
+
+    async function verifySession() {
+      // ── Pull token + email from sessionStorage ──────────────────
+      const token = sessionStorage.getItem("iec_token");
+      const email = sessionStorage.getItem("iec_email");
+
+      // Nothing in storage → not logged in
+      if (!token || !email) {
+        if (!cancelled) {
+          setAdmin(null);
+          setLoading(false);
+          router.replace("/admin/login");
+        }
+        return;
+      }
+
+      // ── Verify token against DB every single page load ──────────
+      // A console-injected sessionStorage entry will have a token
+      // that doesn't exist in admin_sessions → rejected here.
+      const { data: result, error } = await supabase.rpc(
+        "verify_admin_session",
+        { p_token: token, p_email: email }
+      );
+
+      if (cancelled) return;
+
+      if (error || !result?.valid) {
+        // Token invalid, expired, or tampered — force logout
+        sessionStorage.clear();
+        localStorage.clear();
+        setAdmin(null);
+        setLoading(false);
+        router.replace("/admin/login");
+        return;
+      }
+
+      // ── Valid — set admin from server response, not from storage ─
+      setAdmin({
+        id:          result.id,
+        email:       result.email,
+        full_name:   result.full_name,
+        role:        result.role,
+        permissions: result.permissions ?? {},
+      });
+      setLoading(false);
+    }
+
+    verifySession();
+    return () => { cancelled = true; };
+  }, [router]);
 
   return { admin, loading, logout };
-}
-
-export function roleLabel(role: AdminRole): string {
-  const map: Record<AdminRole, string> = {
-    chairperson: "Chairperson",
-    co_chairperson: "Co-Chairperson",
-    secretary_general: "Secretary General",
-    pro: "Public Relations Officer",
-    iec_member: "IEC Member",
-  };
-  return map[role] ?? role;
 }
