@@ -1,64 +1,75 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Production-grade security headers
+  reactStrictMode: true,
+
+  // Fix: allow local network access during development
+  allowedDevOrigins: [
+    "10.49.193.75",
+    "localhost",
+    "127.0.0.1",
+  ],
+
+  // Production security headers
   async headers() {
     return [
       {
-        source: '/(.*)',
+        source: "/(.*)",
         headers: [
-          // Prevent clickjacking
-          { key: 'X-Frame-Options', value: 'DENY' },
-          // Prevent MIME type sniffing
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          // Control referrer information
-          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          // Restrict browser features
-          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), ambient-light-sensor=()' },
-          // HSTS (only in production)
-          ...(process.env.NODE_ENV === 'production' ? [
-            { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' }
-          ] : []),
-          // Content Security Policy
-          { 
-            key: 'Content-Security-Policy', 
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.resend.com https://*.supabase.co; frame-ancestors 'none'; form-action 'self';"
-          }
-        ]
+          { key: "X-Frame-Options",           value: "DENY" },
+          { key: "X-Content-Type-Options",     value: "nosniff" },
+          { key: "X-XSS-Protection",           value: "1; mode=block" },
+          { key: "Referrer-Policy",            value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy",         value: "camera=(), microphone=(), geolocation=()" },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",  // unsafe-eval needed for Next.js dev
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "font-src 'self' https://fonts.gstatic.com",
+              `img-src 'self' data: blob: https://${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace("https://", "")}`,
+              `connect-src 'self' ${process.env.NEXT_PUBLIC_SUPABASE_URL} https://api.resend.com`,
+              "frame-ancestors 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+            ].join("; "),
+          },
+        ],
       },
-      // API routes with stricter CORS
+      // No caching on admin routes — always fresh
       {
-        source: '/api/:path*',
+        source: "/admin/(.*)",
         headers: [
-          { key: 'Access-Control-Allow-Origin', value: process.env.NODE_ENV === 'production' ? 'https://iec.alsi-election-org.workers.dev' : '*' },
-          { key: 'Access-Control-Allow-Methods', value: 'GET,OPTIONS,PATCH,DELETE,POST,PUT' },
-          { key: 'Access-Control-Allow-Headers', value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, Cookie' },
-          { key: 'Access-Control-Allow-Credentials', value: 'true' },
-          { key: 'Access-Control-Max-Age', value: '86400' }
-        ]
-      }
-    ]
+          { key: "Cache-Control", value: "no-store, no-cache, must-revalidate, proxy-revalidate" },
+          { key: "Pragma",        value: "no-cache" },
+          { key: "Expires",       value: "0" },
+        ],
+      },
+      // No caching on API routes
+      {
+        source: "/api/(.*)",
+        headers: [
+          { key: "Cache-Control", value: "no-store" },
+        ],
+      },
+    ];
   },
 
-  // Enhanced security for API routes
-  async rewrites() {
+  // Redirect /admin to /admin/dashboard if already logged in (handled by middleware)
+  async redirects() {
     return [
       {
-        source: '/api/security/:path*',
-        destination: '/api/security/:path*'
-      }
-    ]
+        source: "/admin",
+        destination: "/admin/dashboard",
+        permanent: false,
+      },
+    ];
   },
-
-  // Disable powered by header
-  poweredByHeader: false,
-
-  // Strict trailing slash handling
-  trailingSlash: false,
-
-  // Enable React strict mode for better security
-  reactStrictMode: true,
-
-  };
+};
 
 export default nextConfig;

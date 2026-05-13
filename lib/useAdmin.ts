@@ -1,80 +1,68 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import {
   verifyAdminSession,
   adminLogout,
-  clearAllStorage,
   initSecurityMonitoring,
-  stopSecurityMonitoring,
   sessionManager,
+  type AdminUser,
 } from "@/lib/secureAdminAuth";
 
-export interface AdminUser {
-  id: string;
-  email: string;
-  full_name: string;
-  role: string;
-  permissions: Record<string, boolean>;
+interface UseAdminReturn {
+  admin: AdminUser | null;
+  loading: boolean;
+  logout: () => Promise<void>;
+  refresh: () => Promise<void>;
 }
 
+// FIXED: Added roleLabel export that AdminShell.tsx needs
 export function roleLabel(role: string): string {
   const labels: Record<string, string> = {
+    chairperson:       "Chairperson",
     secretary_general: "Secretary General",
-    chairperson: "IEC Chairperson",
-    commissioner: "IEC Commissioner",
+    treasurer:         "Treasurer",
+    electoral_officer: "Electoral Officer",
+    observer:          "Observer",
   };
   return labels[role] ?? role;
 }
 
-export function useAdmin() {
-  const router = useRouter();
+export function useAdmin(): UseAdminReturn {
   const [admin, setAdmin] = useState<AdminUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const logout = useCallback(async () => {
-    stopSecurityMonitoring();
-    sessionManager.clearTimer();
-    clearAllStorage();
-    await adminLogout();
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await verifyAdminSession();
+      if (result.valid && result.admin) {
+        setAdmin(result.admin);
+      } else {
+        setAdmin(null);
+        window.location.href = "/admin/login?reason=session_expired";
+      }
+    } catch {
+      setAdmin(null);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function checkSession() {
-      setLoading(true);
-
-      // Verify session against the server — httpOnly cookie sent automatically.
-      // No sessionStorage read. A console-injected value cannot pass this.
-      const result = await verifyAdminSession();
-
-      if (cancelled) return;
-
-      if (!result.valid || !result.admin) {
-        clearAllStorage();
-        setAdmin(null);
-        setLoading(false);
-        router.replace("/iec-portal-2026");
-        return;
-      }
-
-      // Admin data comes from the server, not from storage
-      setAdmin(result.admin as AdminUser);
-      setLoading(false);
-
-      // Start security monitoring and session timer
+    refresh().then(() => {
       initSecurityMonitoring();
       sessionManager.startSessionTimer();
-    }
-
-    checkSession();
-
+    });
     return () => {
-      cancelled = true;
+      sessionManager.stopSessionTimer();
     };
-  }, [router]);
+  }, [refresh]);
 
-  return { admin, loading, logout };
+  const logout = useCallback(async () => {
+    sessionManager.stopSessionTimer();
+    await adminLogout();
+  }, []);
+
+  return { admin, loading, logout, refresh };
 }

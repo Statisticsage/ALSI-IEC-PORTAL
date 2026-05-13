@@ -1,11 +1,12 @@
-// postcss.config.js
-// Next.js 16 + Turbopack requires this exact format.
-// Do NOT use @tailwindcss/postcss — it's only for Tailwind v4.
-// This project uses Tailwind v3 (tailwindcss + autoprefixer).
+// postcss.config.mjs
+// File extension is .mjs — must use ESM export default, NOT module.exports
+// Tailwind v3 + autoprefixer only. No @tailwindcss/postcss (that's Tailwind v4).
 
-module.exports = {
+const config = {
   plugins: {
     tailwindcss: {},
     autoprefixer: {},
   },
 };
+
+export default config;

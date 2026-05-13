@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabaseServer";
+import { getServerClient } from "@/lib/supabaseServer"; // FIXED: was supabaseServer
 
-const COOKIE_NAME = "iec_admin_token";
+const COOKIE_NAME  = "iec_admin_token";
 const COOKIE_EMAIL = "iec_admin_email";
 
 export async function GET(req: NextRequest) {
@@ -9,7 +9,6 @@ export async function GET(req: NextRequest) {
     const token = req.cookies.get(COOKIE_NAME)?.value;
     const email = req.cookies.get(COOKIE_EMAIL)?.value;
 
-    // No cookie → not authenticated
     if (!token || !email) {
       return NextResponse.json(
         { valid: false, error: "No session found." },
@@ -19,17 +18,26 @@ export async function GET(req: NextRequest) {
 
     // Validate token format — 64 hex chars
     if (!/^[a-f0-9]{64}$/.test(token)) {
-      clearCookies();
-      return NextResponse.json(
+      const res = NextResponse.json(
         { valid: false, error: "Invalid session format." },
         { status: 401 }
       );
+      res.cookies.set(COOKIE_NAME,  "", { maxAge: 0, path: "/" });
+      res.cookies.set(COOKIE_EMAIL, "", { maxAge: 0, path: "/" });
+      return res;
     }
 
-    // Verify against DB
-    const { data: result, error } = await supabaseServer.rpc(
+    const ip =
+      req.headers.get("cf-connecting-ip") ||
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      "unknown";
+
+    const supabase = getServerClient(); // FIXED: call the function
+
+    // FIXED: correct 3-argument signature matching the DB function
+    const { data: result, error } = await supabase.rpc(
       "verify_admin_session",
-      { p_token: token, p_email: email }
+      { p_token: token, p_email: email, p_ip: ip }
     );
 
     if (error || !result?.valid) {
@@ -37,7 +45,7 @@ export async function GET(req: NextRequest) {
         { valid: false, error: result?.reason || "Session expired." },
         { status: 401 }
       );
-      res.cookies.set(COOKIE_NAME, "", { maxAge: 0, path: "/" });
+      res.cookies.set(COOKIE_NAME,  "", { maxAge: 0, path: "/" });
       res.cookies.set(COOKIE_EMAIL, "", { maxAge: 0, path: "/" });
       return res;
     }
@@ -45,10 +53,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       valid: true,
       admin: {
-        id: result.id,
-        email: result.email,
-        full_name: result.full_name,
-        role: result.role,
+        id:          result.id,
+        email:       result.email,
+        full_name:   result.full_name,
+        role:        result.role,
         permissions: result.permissions,
       },
     });
@@ -59,8 +67,4 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-function clearCookies() {
-  // Helper — actual clearing done in the response object
 }
