@@ -1,72 +1,146 @@
+/**
+ * lib/rateLimit.ts
+ * IEC Admin Portal — Edge-compatible in-memory rate limiter
+ *
+ * Used by middleware.ts to throttle:
+ *  - Admin login attempts
+ *  - Registration form submissions
+ *  - API routes generally
+ *
+ * NOTE: For multi-instance deployments (Vercel Edge), swap the in-memory
+ * store for Upstash Redis. The interface is identical — only the store changes.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 
-interface RateLimitEntry {
+interface RateLimitConfig {
+  windowMs: number;   // sliding window in milliseconds
+  maxRequests: number; // max hits per window
+  message?: string;
+}
+
+interface HitRecord {
   count: number;
   resetAt: number;
 }
 
-const store = new Map<string, RateLimitEntry>();
+// In-memory store — scoped per Edge worker instance
+// Replace with: import { Redis } from "@upstash/redis" for multi-instance
+const store = new Map<string, HitRecord>();
 
-export interface RateLimitConfig {
-  limit: number;
-  windowMs: number;
-  message?: string;
+// Cleanup old entries every 5 minutes to prevent memory leak
+let cleanupScheduled = false;
+function scheduleCleanup() {
+  if (cleanupScheduled) return;
+  cleanupScheduled = true;
+  setInterval(() => {
+    const now = Date.now();
+    store.forEach((record, key) => {
+      if (record.resetAt < now) store.delete(key);
+    });
+  }, 5 * 60 * 1000);
 }
 
+/**
+ * getRateLimitConfig
+ * Returns the appropriate rate limit config for a given path.
+ * Strictest limits on auth routes, looser on public API.
+ */
 export function getRateLimitConfig(pathname: string): RateLimitConfig {
-  if (pathname === "/api/admin/login" || pathname === "/iec-portal-2026") {
-    return { limit: 5, windowMs: 10 * 60 * 1000, message: "Too many login attempts. Try again in 10 minutes." };
+  // Admin login — strictest: 5 attempts per 15 minutes per IP
+  if (pathname === "/api/admin/login") {
+    return {
+      windowMs: 15 * 60 * 1000,
+      maxRequests: 5,
+      message: "Too many login attempts. Try again in 15 minutes.",
+    };
   }
-  if (pathname.startsWith("/api/register") || pathname.startsWith("/register")) {
-    return { limit: 10, windowMs: 5 * 60 * 1000, message: "Too many submissions. Please wait before trying again." };
+
+  // Nonce endpoint — 20 per minute (prevents nonce harvesting)
+  if (pathname === "/api/admin/nonce") {
+    return {
+      windowMs: 60 * 1000,
+      maxRequests: 20,
+      message: "Too many requests.",
+    };
   }
-  if (pathname.startsWith("/api/status") || pathname === "/status") {
-    return { limit: 30, windowMs: 60 * 1000 };
+
+  // Registration endpoints — 3 submissions per hour per IP
+  if (
+    pathname.startsWith("/api/register") ||
+    pathname.startsWith("/register")
+  ) {
+    return {
+      windowMs: 60 * 60 * 1000,
+      maxRequests: 3,
+      message: "Too many registration attempts. Try again in 1 hour.",
+    };
   }
+
+  // All other admin API routes — 60 per minute
   if (pathname.startsWith("/api/admin")) {
-    return { limit: 120, windowMs: 60 * 1000 };
+    return {
+      windowMs: 60 * 1000,
+      maxRequests: 60,
+      message: "Rate limit exceeded.",
+    };
   }
-  return { limit: 200, windowMs: 60 * 1000 };
+
+  // General API — 120 per minute
+  return {
+    windowMs: 60 * 1000,
+    maxRequests: 120,
+    message: "Rate limit exceeded.",
+  };
 }
 
-// Single function — call directly in middleware
-export function checkRateLimit(
-  req: NextRequest,
+/**
+ * rateLimit
+ * Returns a middleware function that enforces the given config.
+ * Returns null (pass-through) or a 429 NextResponse.
+ */
+export function rateLimit(
   config: RateLimitConfig
-): NextResponse | null {
-  const ip =
-    req.headers.get("cf-connecting-ip") ||
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    "unknown";
+): (req: NextRequest) => NextResponse | null {
+  scheduleCleanup();
 
-  const key = `${ip}:${req.nextUrl.pathname}`;
-  const now = Date.now();
-  const entry = store.get(key);
+  return (req: NextRequest): NextResponse | null => {
+    // Key = IP + pathname for per-route per-IP limiting
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+      req.headers.get("x-real-ip") ??
+      "unknown";
 
-  if (!entry || now > entry.resetAt) {
-    store.set(key, { count: 1, resetAt: now + config.windowMs });
+    const key = `${ip}:${req.nextUrl.pathname}`;
+    const now = Date.now();
+
+    const existing = store.get(key);
+
+    if (!existing || existing.resetAt < now) {
+      // Fresh window
+      store.set(key, { count: 1, resetAt: now + config.windowMs });
+      return null;
+    }
+
+    if (existing.count >= config.maxRequests) {
+      const retryAfterSec = Math.ceil((existing.resetAt - now) / 1000);
+      return new NextResponse(
+        JSON.stringify({ error: config.message ?? "Rate limit exceeded." }),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": retryAfterSec.toString(),
+            "X-RateLimit-Limit": config.maxRequests.toString(),
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": existing.resetAt.toString(),
+          },
+        }
+      );
+    }
+
+    // Increment within window
+    existing.count++;
     return null;
-  }
-
-  entry.count += 1;
-
-  if (entry.count > config.limit) {
-    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
-    return new NextResponse(
-      JSON.stringify({
-        error: config.message || "Rate limit exceeded.",
-        retryAfter,
-      }),
-      {
-        status: 429,
-        headers: {
-          "Content-Type": "application/json",
-          "Retry-After": String(retryAfter),
-        },
-      }
-    );
-  }
-
-  return null;
+  };
 }
