@@ -1,0 +1,11 @@
+name = "iec-election-portal"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".open-next/assets"
+
+[vars]
+# Public runtime variables — non-secret config only.
+# Secrets (Supabase keys, Resend key) must be set via:
+# Cloudflare Pages → Settings → Environment Variables → Production (encrypted)
+NEXT_PUBLIC_APP_NAME = "IEC Election Portal"
+NEXT_PUBLIC_APP_ENV = "production"
