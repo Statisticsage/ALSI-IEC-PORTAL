@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import AdminShell from "@/components/layout/AdminShell";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import { useAdmin } from "@/lib/useAdmin";
 import {
   exportCandidatesToExcel,
@@ -42,6 +42,7 @@ export default function ExportCenterPage() {
 
       // Log export to audit
       if (admin) {
+        const supabase = getSupabase();
         await supabase.from("audit_logs").insert([{
           actor_name: admin.full_name,
           actor_role: admin.role,
@@ -61,10 +62,12 @@ export default function ExportCenterPage() {
 
   // ── DATA FETCHERS ──────────────────────────────────────
   async function fetchCandidates(): Promise<Candidate[]> {
+    const supabase = getSupabase();
     const { data } = await supabase.from("candidates").select("*").order("submitted_at", { ascending: false });
     return (data as Candidate[]) ?? [];
   }
   async function fetchVoters(): Promise<Voter[]> {
+    const supabase = getSupabase();
     const { data } = await supabase.rpc("rpc_voter_status_lookup", {
       passport_number: null,
       voter_id: null,
@@ -72,6 +75,7 @@ export default function ExportCenterPage() {
     return (data as Voter[]) ?? [];
   }
   async function fetchParties(): Promise<PoliticalParty[]> {
+    const supabase = getSupabase();
     const { data } = await supabase.from("political_parties").select("*").order("submitted_at", { ascending: false });
     return (data as PoliticalParty[]) ?? [];
   }

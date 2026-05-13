@@ -21,17 +21,8 @@ export async function GET(req: NextRequest) {
 
   const { data: cand } = await db
     .from("candidates")
-    .select("
-      application_id,
-      full_name,
-      status,
-      submitted_at,
-      updated_at
-    ")
-    .or(`
-      passport_number.eq.${q},
-      application_id.eq.${q}
-    `)
+    .select("application_id, full_name, status, submitted_at, updated_at")
+    .or(`passport_number.eq.${q},application_id.eq.${q}`)
     .maybeSingle();
 
   if (cand) {
@@ -47,17 +38,8 @@ export async function GET(req: NextRequest) {
 
   const { data: voter } = await db
     .from("voters")
-    .select("
-      voter_id_number,
-      full_name,
-      verification_status,
-      submitted_at,
-      updated_at
-    ")
-    .or(`
-      passport_number.eq.${q},
-      voter_id_number.eq.${q}
-    `)
+    .select("voter_id_number, full_name, verification_status, submitted_at, updated_at")
+    .or(`passport_number.eq.${q},voter_id_number.eq.${q}`)
     .maybeSingle();
 
   if (voter) {
@@ -73,17 +55,8 @@ export async function GET(req: NextRequest) {
 
   const { data: party } = await db
     .from("political_parties")
-    .select("
-      party_name,
-      acronym,
-      status,
-      submitted_at,
-      updated_at
-    ")
-    .or(`
-      party_name.ilike.%${q}%,
-      acronym.eq.${q}
-    `)
+    .select("party_name, acronym, status, submitted_at, updated_at")
+    .or(`party_name.ilike.%${q}%,acronym.eq.${q}`)
     .maybeSingle();
 
   if (party) {

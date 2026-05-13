@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import AdminShell from "@/components/layout/AdminShell";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import type { Candidate, ApplicationStatus } from "@/types";
 import { APPLICATION_STATUSES, POSITIONS } from "@/lib/constants";
 import { useAdmin } from "@/lib/useAdmin";
@@ -26,6 +26,7 @@ export default function AdminCandidatesPage() {
 
   async function fetchCandidates() {
     setLoading(true);
+    const supabase = getSupabase();
     const { data, error } = await supabase
       .from("candidates")
       .select("*")
@@ -40,6 +41,7 @@ export default function AdminCandidatesPage() {
     setSaving(true);
     setSaveMsg("");
 
+    const supabase = getSupabase();
     const { error } = await supabase
       .from("candidates")
       .update({ status, admin_notes: notes, updated_at: new Date().toISOString() })

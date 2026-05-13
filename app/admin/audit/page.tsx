@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AdminShell from "@/components/layout/AdminShell";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import { AuditLog } from "@/types";
 
 const ACTION_COLORS: Record<string, string> = {
@@ -33,6 +33,7 @@ export default function AuditLogPage() {
 
   async function fetchLogs() {
     setLoading(true);
+    const supabase = getSupabase();
     let query = supabase
       .from("audit_logs")
       .select("*", { count: "exact" })
@@ -254,6 +255,7 @@ function SecurityAlertBanner() {
 
   useEffect(() => {
     async function check() {
+      const supabase = getSupabase();
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { count: c } = await supabase
         .from("login_attempts")
