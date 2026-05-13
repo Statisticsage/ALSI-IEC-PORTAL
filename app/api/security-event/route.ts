@@ -1,17 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-// Service role client for security event logging
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-);
+export const dynamic = 'force-dynamic';
 
+// ---------------------------------------------------------------------------
+// Admin client factory — instantiated per-request, never at module load time
+// ---------------------------------------------------------------------------
+function getAdminClient(): SupabaseClient {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !key) {
+    throw new Error(
+      '[security-event] Missing Supabase env vars. ' +
+      'Ensure NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set ' +
+      'in Cloudflare Pages → Settings → Environment Variables → Production.'
+    );
+  }
+
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+interface SecurityEvent {
+  type: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  timestamp: string;
+  details?: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/security-event
+// ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
+  let adminClient: SupabaseClient;
+
   try {
-    const event = await req.json();
-    
+    adminClient = getAdminClient();
+  } catch (err) {
+    console.error('[security-event] Client init failed:', err);
+    return NextResponse.json(
+      { error: 'Server configuration error' },
+      { status: 500 }
+    );
+  }
+
+  try {
+    const event: SecurityEvent = await req.json();
+
     // Validate required fields
     if (!event.type || !event.severity || !event.timestamp) {
       return NextResponse.json(
@@ -20,22 +60,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get client IP for additional context
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-              req.headers.get('x-real-ip') ||
-              'unknown';
+    // Extract client IP
+    const ip =
+      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      req.headers.get('x-real-ip') ||
+      'unknown';
 
     // Log to security_events table
-    const { error } = await supabaseAdmin
+    const { error } = await adminClient
       .from('security_events')
       .insert({
-        event_type: event.type,
-        severity: event.severity,
-        details: event.details || {},
-        ip_address: ip,
-        user_agent: req.headers.get('user-agent') || 'unknown',
-        timestamp: event.timestamp,
-        created_at: new Date().toISOString()
+        event_type:  event.type,
+        severity:    event.severity,
+        details:     event.details ?? {},
+        ip_address:  ip,
+        user_agent:  req.headers.get('user-agent') ?? 'unknown',
+        timestamp:   event.timestamp,
+        created_at:  new Date().toISOString(),
       });
 
     if (error) {
@@ -46,9 +87,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // For critical events, trigger immediate alert
+    // Trigger immediate alert for critical events
     if (event.severity === 'critical') {
-      await triggerSecurityAlert(event, ip);
+      await triggerSecurityAlert(adminClient, event, ip, req);
     }
 
     return NextResponse.json({ success: true });
@@ -62,26 +103,36 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function triggerSecurityAlert(event: any, ip: string) {
+// ---------------------------------------------------------------------------
+// Critical event handler
+// ---------------------------------------------------------------------------
+async function triggerSecurityAlert(
+  adminClient: SupabaseClient,
+  event: SecurityEvent,
+  ip: string,
+  req: NextRequest
+): Promise<void> {
   try {
-    // Log to audit_logs for immediate visibility
-    await supabaseAdmin
-      .from('audit_logs')
-      .insert({
-        actor_name: 'Security System',
-        actor_role: 'system',
-        action_type: 'security_alert',
-        target_type: 'system',
-        target_id: 'security_monitor',
-        description: `CRITICAL: ${event.type} detected from IP ${ip}`,
-        ip_address: ip,
-        timestamp: new Date().toISOString()
-      });
+    // Write to audit_logs for immediate dashboard visibility
+    await adminClient.from('audit_logs').insert({
+      actor_name:  'Security System',
+      actor_role:  'system',
+      action_type: 'security_alert',
+      target_type: 'system',
+      target_id:   'security_monitor',
+      description: `CRITICAL: ${event.type} detected from IP ${ip}`,
+      ip_address:  ip,
+      timestamp:   new Date().toISOString(),
+    });
 
-    // Send email alert if configured
+    // Send email alert via internal route — use absolute URL (required server-side)
     if (process.env.RESEND_API_KEY) {
-      await fetch('/api/security-alert', {
-        method: 'POST',
+      const host   = req.headers.get('host') ?? 'localhost:3000';
+      const proto  = host.startsWith('localhost') ? 'http' : 'https';
+      const origin = `${proto}://${host}`;
+
+      await fetch(`${origin}/api/security-alert`, {
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           security_event: event,
@@ -90,8 +141,8 @@ async function triggerSecurityAlert(event: any, ip: string) {
         }),
       });
     }
-
   } catch (err) {
+    // Non-fatal — event is already logged; alert failure must not break the response
     console.error('[security-event] Failed to trigger alert:', err);
   }
 }

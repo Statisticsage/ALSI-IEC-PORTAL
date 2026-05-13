@@ -1,38 +1,78 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-);
+// Force dynamic — this route must never be statically evaluated at build time
+export const dynamic = 'force-dynamic';
 
-async function verifySession(): Promise<boolean> {
+// ---------------------------------------------------------------------------
+// Admin client factory — called at request time, NOT module load time.
+// Env vars are available at runtime but NOT during Next.js static build phase.
+// ---------------------------------------------------------------------------
+function getAdminClient(): SupabaseClient {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !key) {
+    throw new Error(
+      '[Dashboard] Missing Supabase env vars. ' +
+      'Ensure NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set ' +
+      'in Cloudflare Pages → Settings → Environment Variables → Production.'
+    );
+  }
+
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Session verification
+// ---------------------------------------------------------------------------
+async function verifySession(client: SupabaseClient): Promise<boolean> {
   const cookieStore = await cookies();
   const token = cookieStore.get('iec_admin_token')?.value;
   const email = cookieStore.get('iec_admin_email')?.value;
+
   if (!token || !email) return false;
-  const { data } = await supabaseAdmin.rpc('verify_admin_session', {
-    p_token: token, p_email: email,
+
+  const { data } = await client.rpc('verify_admin_session', {
+    p_token: token,
+    p_email: email,
   });
+
   return data?.valid === true;
 }
 
+// ---------------------------------------------------------------------------
+// GET /api/admin/dashboard
+// ---------------------------------------------------------------------------
 export async function GET(_req: NextRequest) {
-  if (!(await verifySession())) {
+  let adminClient: SupabaseClient;
+
+  try {
+    adminClient = getAdminClient();
+  } catch (err) {
+    console.error('[Dashboard] Client init failed:', err);
+    return NextResponse.json(
+      { error: 'Server configuration error' },
+      { status: 500 }
+    );
+  }
+
+  if (!(await verifySession(adminClient))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const [votersRes, candidatesRes, partiesRes] = await Promise.all([
-    supabaseAdmin.from('voters').select('verification_status, voter_approved'),
-    supabaseAdmin.from('candidates').select('status'),
-    supabaseAdmin.from('political_parties').select('status'),
+    adminClient.from('voters').select('verification_status, voter_approved'),
+    adminClient.from('candidates').select('status'),
+    adminClient.from('political_parties').select('status'),
   ]);
 
-  const voters     = votersRes.data     || [];
-  const candidates = candidatesRes.data || [];
-  const parties    = partiesRes.data    || [];
+  const voters     = votersRes.data     ?? [];
+  const candidates = candidatesRes.data ?? [];
+  const parties    = partiesRes.data    ?? [];
 
   return NextResponse.json({
     voters: {
