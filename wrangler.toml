@@ -1,4 +1,4 @@
-name = "iec-election-portal"
+name = "iec"
 compatibility_date = "2025-05-13"
 compatibility_flags = ["nodejs_compat"]
 main = ".open-next/worker.js"
