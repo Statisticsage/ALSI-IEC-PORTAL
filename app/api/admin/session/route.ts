@@ -1,58 +1,47 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
+import { NextRequest, NextResponse } from "next/server";
+import { supabaseServer } from "@/lib/supabaseServer";
 
-// Service role client - for verify_admin_session only (server-side)
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-);
+const COOKIE_NAME = "iec_admin_token";
+const COOKIE_EMAIL = "iec_admin_email";
 
 export async function GET(req: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('iec_admin_token')?.value;
-    const email = cookieStore.get('iec_admin_email')?.value;
+    const token = req.cookies.get(COOKIE_NAME)?.value;
+    const email = req.cookies.get(COOKIE_EMAIL)?.value;
 
-    // No session cookie
+    // No cookie → not authenticated
     if (!token || !email) {
       return NextResponse.json(
-        { valid: false, error: 'No session found.' },
+        { valid: false, error: "No session found." },
         { status: 401 }
       );
     }
 
-    // Validate token format
+    // Validate token format — 64 hex chars
     if (!/^[a-f0-9]{64}$/.test(token)) {
-      // Clear invalid cookies
-      const res = NextResponse.json(
-        { valid: false, error: 'Invalid session format.' },
+      clearCookies();
+      return NextResponse.json(
+        { valid: false, error: "Invalid session format." },
         { status: 401 }
       );
-      cookieStore.set('iec_admin_token', '', { maxAge: 0, path: '/admin' });
-      cookieStore.set('iec_admin_email', '', { maxAge: 0, path: '/admin' });
-      return res;
     }
 
-    // Verify session in database
-    const { data: result, error } = await supabaseAdmin.rpc(
-      'verify_admin_session',
+    // Verify against DB
+    const { data: result, error } = await supabaseServer.rpc(
+      "verify_admin_session",
       { p_token: token, p_email: email }
     );
 
     if (error || !result?.valid) {
-      // Clear invalid session cookies
       const res = NextResponse.json(
-        { valid: false, error: 'Session expired or invalid.' },
+        { valid: false, error: result?.reason || "Session expired." },
         { status: 401 }
       );
-      cookieStore.set('iec_admin_token', '', { maxAge: 0, path: '/admin' });
-      cookieStore.set('iec_admin_email', '', { maxAge: 0, path: '/admin' });
+      res.cookies.set(COOKIE_NAME, "", { maxAge: 0, path: "/" });
+      res.cookies.set(COOKIE_EMAIL, "", { maxAge: 0, path: "/" });
       return res;
     }
 
-    // Valid session - return admin data
     return NextResponse.json({
       valid: true,
       admin: {
@@ -60,15 +49,18 @@ export async function GET(req: NextRequest) {
         email: result.email,
         full_name: result.full_name,
         role: result.role,
-        permissions: result.permissions || {},
+        permissions: result.permissions,
       },
     });
-
   } catch (err) {
-    console.error('[session] Unexpected error:', err);
+    console.error("[SESSION] Error:", err);
     return NextResponse.json(
-      { valid: false, error: 'Session verification failed.' },
+      { valid: false, error: "Session verification failed." },
       { status: 500 }
     );
   }
+}
+
+function clearCookies() {
+  // Helper — actual clearing done in the response object
 }

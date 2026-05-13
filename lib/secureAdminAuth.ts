@@ -1,10 +1,10 @@
 "use client";
 
-// 🛡️ PRODUCTION-GRADE SECURE ADMIN AUTHENTICATION
-// IEC Election Portal - Government-Level Security Implementation
-// NO console injection vulnerabilities - httpOnly cookies only
-
-// Server-side imports removed - this is client-side code
+// ================================================================
+// IEC Admin Portal — Secure Authentication Library
+// All auth goes through /api/admin/* routes — ZERO direct Supabase
+// calls from the browser. The anon key cannot touch admin data.
+// ================================================================
 
 export interface AdminUser {
   id: string;
@@ -19,338 +19,196 @@ export interface LoginResult {
   error?: string;
   locked?: boolean;
   admin?: AdminUser;
-  requiresReauth?: boolean;
 }
 
 export interface SessionResult {
   valid: boolean;
   admin?: AdminUser;
   error?: string;
-  rotated?: boolean;
 }
 
-export interface SecurityEvent {
-  type: 'console_injection' | 'session_hijack' | 'ip_change' | 'token_manipulation';
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  details: Record<string, any>;
-  timestamp: string;
-  ip?: string;
-  userAgent?: string;
-}
-
-// Console injection detection - PRODUCTION GRADE
-export function detectConsoleInjection(): SecurityEvent | null {
-  if (typeof window === 'undefined') return null;
-  
-  const suspiciousKeys = [
-    'iec_admin', 'admin_session', 'admin_token', 'iec_token', 
-    'iec_email', 'adminUser', 'session_token'
-  ];
-  
-  let injectionDetected = false;
-  const injectedKeys: string[] = [];
-  
-  suspiciousKeys.forEach(key => {
-    try {
-      const sessionValue = sessionStorage.getItem(key);
-      const localValue = localStorage.getItem(key);
-      
-      if (sessionValue || localValue) {
-        injectionDetected = true;
-        injectedKeys.push(key);
-        
-        // Clear suspicious data immediately
-        sessionStorage.removeItem(key);
-        localStorage.removeItem(key);
-      }
-    } catch {}
-  });
-  
-  if (injectionDetected) {
-    const event: SecurityEvent = {
-      type: 'console_injection',
-      severity: 'critical',
-      details: { 
-        injectedKeys, 
-        userAgent: navigator.userAgent,
-        url: window.location.href
-      },
-      timestamp: new Date().toISOString()
-    };
-    
-    // Log security event
-    logSecurityEvent(event);
-    
-    return event;
-  }
-  
-  return null;
-}
-
-// Enhanced session monitoring with rotation
-export async function verifyAdminSessionWithRotation(): Promise<SessionResult> {
-  try {
-    const res = await fetch('/api/admin/session', {
-      method: 'GET',
-      credentials: 'include',
-      headers: {
-        'X-Security-Monitor': 'true',
-        'X-Client-Time': Date.now().toString(),
-        'X-User-Agent': navigator.userAgent
-      },
-    });
-    
-    if (res.status === 401) {
-      return { valid: false, error: 'Session expired.' };
-    }
-    
-    const data = await res.json();
-    
-    // Check if token was rotated
-    const rotated = res.headers.get('X-Token-Rotated') === 'true';
-    
-    return data.valid
-      ? { valid: true, admin: data.admin, rotated }
-      : { valid: false, error: data.error };
-      
-  } catch {
-    return { valid: false, error: 'Session verification failed.' };
-  }
-}
-
-// Secure login with enhanced monitoring
+// ── 1. LOGIN ────────────────────────────────────────────────────
+// Calls /api/admin/login — server sets httpOnly cookie on success.
+// sessionStorage is NEVER written with admin data.
 export async function secureAdminLogin(
-  email: string, 
-  password: string,
-  clientFingerprint?: string
+  email: string,
+  password: string
 ): Promise<LoginResult> {
   try {
-    // Clear any legacy storage first
+    // Clear all legacy storage before attempting login
     clearAllStorage();
-    
-    const res = await fetch('/api/admin/login', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'X-Client-Fingerprint': clientFingerprint || generateFingerprint(),
-        'X-Security-Context': 'production'
-      },
-      credentials: 'include',
-      body: JSON.stringify({ 
-        email, 
+
+    const res = await fetch("/api/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",           // sends + receives cookies
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
         password,
-        securityContext: {
-          timestamp: Date.now(),
-          userAgent: navigator.userAgent,
-          screenResolution: `${screen.width}x${screen.height}`,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-        }
       }),
     });
-    
+
     const data = await res.json();
-    
+
     if (!res.ok || !data.success) {
-      return { 
-        success: false, 
-        error: data.error || 'Login failed.', 
-        locked: data.locked 
+      return {
+        success: false,
+        error: data.error || "Invalid credentials. Access denied.",
+        locked: data.locked === true,
       };
     }
-    
-    return { 
-      success: true, 
-      admin: data.admin,
-      requiresReauth: data.requiresReauth
-    };
-    
+
+    return { success: true, admin: data.admin };
   } catch {
-    return { success: false, error: 'Network error. Check connection.' };
+    return { success: false, error: "Network error. Check your connection." };
   }
 }
 
-// Enhanced logout with security cleanup
-export async function secureAdminLogout(): Promise<void> {
+// ── 2. SESSION VERIFY ───────────────────────────────────────────
+// Called on every protected page load. Reads httpOnly cookie server-side.
+// A console-injected sessionStorage value cannot pass this check.
+export async function verifyAdminSession(): Promise<SessionResult> {
   try {
-    await fetch('/api/admin/logout', { 
-      method: 'POST', 
-      credentials: 'include',
-      headers: {
-        'X-Logout-Reason': 'user_initiated',
-        'X-Client-Time': Date.now().toString()
-      }
+    const res = await fetch("/api/admin/session", {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+    });
+
+    if (res.status === 401) {
+      return { valid: false, error: "Session expired or invalid." };
+    }
+
+    if (!res.ok) {
+      return { valid: false, error: "Session check failed." };
+    }
+
+    const data = await res.json();
+    return data.valid
+      ? { valid: true, admin: data.admin }
+      : { valid: false, error: data.error || "Unauthorised." };
+  } catch {
+    return { valid: false, error: "Network error during session check." };
+  }
+}
+
+// ── 3. LOGOUT ───────────────────────────────────────────────────
+// Server invalidates DB session + clears httpOnly cookie.
+export async function adminLogout(): Promise<void> {
+  try {
+    await fetch("/api/admin/logout", {
+      method: "POST",
+      credentials: "include",
     });
   } finally {
-    // Clear all storage as backup
     clearAllStorage();
-    window.location.href = '/admin/login';
+    window.location.replace("/iec-portal-2026");
   }
 }
 
-// Complete storage cleanup
+// ── 4. CLEAR LEGACY STORAGE ─────────────────────────────────────
+// Wipes every storage key the old (insecure) implementation used.
 export function clearAllStorage(): void {
-  if (typeof window === 'undefined') return;
-  
-  // Clear all possible auth-related storage
-  const allKeys = [
-    'iec_admin', 'admin_session', 'admin_token', 'adminUser',
-    'iec_admin_session', 'iec_token', 'iec_email', 'session_token',
-    'auth_token', 'user_session', 'admin_data', 'login_token'
+  if (typeof window === "undefined") return;
+
+  const legacyKeys = [
+    "iec_admin",
+    "iec_token",
+    "iec_email",
+    "admin_session",
+    "admin_token",
+    "adminUser",
+    "iec_admin_session",
+    "admin_user",
+    "admin_role",
   ];
-  
-  allKeys.forEach(key => {
+
+  legacyKeys.forEach((key) => {
     try { sessionStorage.removeItem(key); } catch {}
     try { localStorage.removeItem(key); } catch {}
   });
-  
-  // Also clear any remaining items that look suspicious
-  try {
-    Object.keys(sessionStorage).forEach(key => {
-      if (key.includes('admin') || key.includes('token') || key.includes('session')) {
-        sessionStorage.removeItem(key);
-      }
-    });
-    
-    Object.keys(localStorage).forEach(key => {
-      if (key.includes('admin') || key.includes('token') || key.includes('session')) {
-        localStorage.removeItem(key);
-      }
-    });
-  } catch {}
 }
 
-// Generate client fingerprint for tracking
-function generateFingerprint(): string {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    ctx.textBaseline = 'top';
-    ctx.font = '14px Arial';
-    ctx.fillText('Fingerprint', 2, 2);
+// ── 5. CONSOLE INJECTION DETECTOR ───────────────────────────────
+// Detects if a hacker has placed auth data in storage manually.
+// Returns the suspicious value found (truthy) or null.
+export function detectConsoleInjection(): string | null {
+  if (typeof window === "undefined") return null;
+
+  const watchKeys = [
+    "iec_admin",
+    "iec_token",
+    "iec_email",
+    "admin_session",
+    "admin_token",
+    "adminUser",
+    "iec_admin_session",
+  ];
+
+  for (const key of watchKeys) {
+    let val: string | null = null;
+    try { val = sessionStorage.getItem(key); } catch {}
+    if (!val) {
+      try { val = localStorage.getItem(key); } catch {}
+    }
+    if (val) {
+      // Wipe it immediately
+      try { sessionStorage.removeItem(key); } catch {}
+      try { localStorage.removeItem(key); } catch {}
+      return key; // return which key was suspicious
+    }
   }
-  
-  const fingerprint = [
-    navigator.userAgent,
-    navigator.language,
-    screen.width + 'x' + screen.height,
-    new Date().getTimezoneOffset(),
-    canvas?.toDataURL() || '',
-    navigator.hardwareConcurrency || '',
-    (navigator as any).deviceMemory || 'unknown'
-  ].join('|');
-  
-  return btoa(fingerprint).substring(0, 32);
+
+  return null;
 }
 
-// Log security events to server
-async function logSecurityEvent(event: SecurityEvent): Promise<void> {
-  try {
-    await fetch('/api/security-event', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(event),
-    });
-  } catch {
-    // Silent fail - security logging shouldn't break user experience
-  }
-}
+// ── 6. SECURITY MONITORING ──────────────────────────────────────
+// Watches storage for injection attempts while admin is logged in.
+let monitorInterval: ReturnType<typeof setInterval> | null = null;
 
-// Monitor for suspicious activity
 export function initSecurityMonitoring(): void {
-  if (typeof window === 'undefined') return;
-  
-  // Monitor console access attempts
-  let consoleAccessCount = 0;
-  const originalConsole = window.console;
-  
-  // Detect console opening (basic detection)
-  const detectConsoleAccess = () => {
-    consoleAccessCount++;
-    if (consoleAccessCount > 10) { // Threshold for suspicious activity
-      logSecurityEvent({
-        type: 'console_injection',
-        severity: 'medium',
-        details: { consoleAccessCount, action: 'repeated_console_access' },
-        timestamp: new Date().toISOString()
-      });
+  if (typeof window === "undefined") return;
+  if (monitorInterval) return; // already running
+
+  monitorInterval = setInterval(() => {
+    const found = detectConsoleInjection();
+    if (found) {
+      console.error(`[IEC SECURITY] Injection attempt cleared: ${found}`);
     }
-  };
-  
-  // Monitor storage changes
-  const originalSetItem = Storage.prototype.setItem;
-  Storage.prototype.setItem = function(key: string, value: string) {
-    if (key.includes('admin') || key.includes('token') || key.includes('session')) {
-      logSecurityEvent({
-        type: 'token_manipulation',
-        severity: 'high',
-        details: { key, action: 'storage_set', valueLength: value.length },
-        timestamp: new Date().toISOString()
-      });
-    }
-    return originalSetItem.call(this, key, value);
-  };
-  
-  // Monitor window focus/blur for tab switching attacks
-  let blurCount = 0;
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      blurCount++;
-      if (blurCount > 20) { // Excessive tab switching
-        logSecurityEvent({
-          type: 'session_hijack',
-          severity: 'medium',
-          details: { blurCount, action: 'excessive_tab_switching' },
-          timestamp: new Date().toISOString()
-        });
-      }
-    }
-  });
+  }, 3000); // check every 3 seconds
 }
 
-// Session timeout management
-export class SessionManager {
-  private timeoutId: NodeJS.Timeout | null = null;
-  private warningShown = false;
-  
-  constructor(private onTimeout: () => void, private onWarning: () => void) {}
-  
-  startSessionTimer(duration: number = 8 * 60 * 60 * 1000): void { // 8 hours
-    this.clearSessionTimer();
-    
-    // Show warning at 7 hours
-    this.timeoutId = setTimeout(() => {
-      if (!this.warningShown) {
-        this.onWarning();
-        this.warningShown = true;
-        
-        // Final timeout after 1 more hour
-        this.timeoutId = setTimeout(() => {
-          this.onTimeout();
-        }, 60 * 60 * 1000);
-      }
-    }, duration - 60 * 60 * 1000);
-  }
-  
-  clearSessionTimer(): void {
-    if (this.timeoutId) {
-      clearTimeout(this.timeoutId);
-      this.timeoutId = null;
-    }
-    this.warningShown = false;
-  }
-  
-  extendSession(): void {
-    this.startSessionTimer();
+export function stopSecurityMonitoring(): void {
+  if (monitorInterval) {
+    clearInterval(monitorInterval);
+    monitorInterval = null;
   }
 }
 
-// Export for use in components
-export const sessionManager = new SessionManager(
-  () => secureAdminLogout(),
-  () => {
-    // Show session warning
-    if (typeof window !== 'undefined') {
-      alert('Your session will expire in 1 hour. Please save your work.');
+// ── 7. SESSION TIMER ────────────────────────────────────────────
+// Auto-logout after 2 hours of inactivity.
+export const sessionManager = {
+  timer: null as ReturnType<typeof setTimeout> | null,
+  TIMEOUT_MS: 2 * 60 * 60 * 1000, // 2 hours
+
+  startSessionTimer() {
+    this.resetTimer();
+    ["click", "keydown", "mousemove", "touchstart"].forEach((evt) => {
+      window.addEventListener(evt, () => this.resetTimer(), { passive: true });
+    });
+  },
+
+  resetTimer() {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(async () => {
+      await adminLogout();
+    }, this.TIMEOUT_MS);
+  },
+
+  clearTimer() {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
     }
-  }
-);
+  },
+};

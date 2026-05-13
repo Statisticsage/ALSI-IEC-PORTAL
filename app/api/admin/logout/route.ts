@@ -1,38 +1,61 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
+﻿import { NextRequest, NextResponse } from "next/server";
+import { supabaseServer } from "@/lib/supabaseServer";
 
-// Service role client - for invalidate_admin_session only (server-side)
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-);
+const COOKIE_NAME = "iec_admin_token";
+const COOKIE_EMAIL = "iec_admin_email";
 
 export async function POST(req: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('iec_admin_token')?.value;
+    const token = req.cookies.get(COOKIE_NAME)?.value;
+    const email = req.cookies.get(COOKIE_EMAIL)?.value;
 
-    // Invalidate session in database if token exists
+    // Invalidate the session in the DB
     if (token) {
-      await supabaseAdmin.rpc('invalidate_admin_session', { p_token: token });
+      await supabaseServer.rpc("invalidate_admin_session", { p_token: token });
     }
 
-    // Clear all admin cookies
+    // Log the logout
+    if (email) {
+      const ip =
+        req.headers.get("cf-connecting-ip") ||
+        req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+        "unknown";
+
+      await supabaseServer.from("audit_logs").insert({
+        actor_name: email,
+        actor_email: email,
+        actor_role: "admin",
+        action_type: "LOGOUT",
+        target_type: "system",
+        target_id: null,
+        description: `Admin logout from IP ${ip}`,
+        ip_address: ip,
+        visible_to: "secretary_general",
+      });
+    }
+
     const res = NextResponse.json({ success: true });
-    cookieStore.set('iec_admin_token', '', { maxAge: 0, path: '/admin' });
-    cookieStore.set('iec_admin_email', '', { maxAge: 0, path: '/admin' });
+
+    // Clear both cookies
+    const clearOptions = {
+      maxAge: 0,
+      path: "/",
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict" as const,
+    };
+
+    res.cookies.set(COOKIE_NAME, "", clearOptions);
+    res.cookies.set(COOKIE_EMAIL, "", { ...clearOptions, httpOnly: false });
 
     return res;
-
   } catch (err) {
-    console.error('[logout] Error:', err);
-    // Still clear cookies even if DB call fails
-    const cookieStore = await cookies();
+    console.error("[LOGOUT] Error:", err);
+    // Still clear cookies even on error
     const res = NextResponse.json({ success: true });
-    cookieStore.set('iec_admin_token', '', { maxAge: 0, path: '/admin' });
-    cookieStore.set('iec_admin_email', '', { maxAge: 0, path: '/admin' });
+    res.cookies.set(COOKIE_NAME, "", { maxAge: 0, path: "/" });
+    res.cookies.set(COOKIE_EMAIL, "", { maxAge: 0, path: "/" });
     return res;
   }
 }
+
