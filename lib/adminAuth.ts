@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 // World-class government-level security implementation
 // IEC Admin Portal - Secure Authentication Library
@@ -71,7 +71,7 @@ export async function adminLogout(): Promise<void> {
   try {
     await fetch('/api/admin/logout', { method: 'POST', credentials: 'include' });
   } finally {
-    window.location.href = '/admin/login';
+    window.location.href = '/iec-portal-2026';
   }
 }
 
@@ -108,3 +108,4 @@ export function detectConsoleInjection(): boolean {
   
   return injectionDetected;
 }
+

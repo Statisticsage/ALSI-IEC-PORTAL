@@ -1,5 +1,5 @@
-// ============================================================
-// IEC DIGITAL REGISTRATION PORTAL — TYPE DEFINITIONS
+﻿// ============================================================
+// IEC DIGITAL REGISTRATION PORTAL â€” TYPE DEFINITIONS
 // Aligned to datawarehouse Supabase schema (xkcfpfbjezpwgdcestbi)
 // ============================================================
 
@@ -37,7 +37,7 @@ export type ALSIMemberStatus =
   | "unknown";
 
 // -------------------------------------------------------
-// CANDIDATE — matches candidates table exactly
+// CANDIDATE â€” matches candidates table exactly
 // -------------------------------------------------------
 
 export interface CandidateFormData {
@@ -57,7 +57,7 @@ export interface CandidateFormData {
   position_applied: CandidatePosition;
   political_party: string;
   running_mate: string;
-  // document URLs — populated after upload
+  // document URLs â€” populated after upload
   passport_url: string;
   transcript_url: string;
   photo_url: string;
@@ -78,7 +78,7 @@ export interface Candidate extends CandidateFormData {
 }
 
 // -------------------------------------------------------
-// VOTER — matches voters table exactly
+// VOTER â€” matches voters table exactly
 // -------------------------------------------------------
 
 export interface VoterFormData {
@@ -90,8 +90,8 @@ export interface VoterFormData {
   passport_number: string;
   current_state: string;
   alsi_member_status: ALSIMemberStatus;
-  voter_id?: string;
-  // document URLs — populated after upload
+  voter_id_number?: string;
+  // document URLs â€” populated after upload
   passport_url: string;
   student_id_url: string;
 }
@@ -109,7 +109,7 @@ export interface Voter extends VoterFormData {
 }
 
 // -------------------------------------------------------
-// POLITICAL PARTY — matches political_parties table exactly
+// POLITICAL PARTY â€” matches political_parties table exactly
 // -------------------------------------------------------
 
 export interface PartyFormData {
@@ -121,7 +121,7 @@ export interface PartyFormData {
   contact_email: string;
   whatsapp: string;
   description: string;
-  // document URLs — populated after upload
+  // document URLs â€” populated after upload
   symbol_url: string;
   payment_proof_url: string;
   // payment verification
@@ -137,7 +137,7 @@ export interface PoliticalParty extends PartyFormData {
 }
 
 // -------------------------------------------------------
-// ADMIN USER — matches admin_users table exactly
+// ADMIN USER â€” matches admin_users table exactly
 // -------------------------------------------------------
 
 export interface AdminUser {
@@ -151,7 +151,7 @@ export interface AdminUser {
 }
 
 // -------------------------------------------------------
-// AUDIT LOG — matches audit_logs table exactly
+// AUDIT LOG â€” matches audit_logs table exactly
 // -------------------------------------------------------
 
 export type AuditActionType =
@@ -203,3 +203,4 @@ export interface DashboardStats {
   total_parties: number;
   approved_parties: number;
 }
+

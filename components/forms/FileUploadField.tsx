@@ -8,7 +8,7 @@
  */
 
 import { useState, useRef } from "react";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 
 interface FileUploadFieldProps {
   label: string;
@@ -73,6 +73,8 @@ export default function FileUploadField({
         .replace(/[^a-zA-Z0-9._-]/g, "_")
         .toLowerCase();
       const uniquePath = `${folder}/${Date.now()}-${Math.random().toString(16).slice(2)}-${safeName}`;
+
+      const supabase = getSupabase();
 
       const { error: uploadError } = await supabase.storage
         .from(bucket)

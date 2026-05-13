@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import { APPLICATION_STATUSES } from "@/lib/constants";
 
 type RecordType = "candidate" | "voter" | "party";
@@ -33,6 +33,8 @@ export default function StatusPage() {
     const q = query.trim().toUpperCase();
 
     try {
+      const supabase = getSupabase();
+
       // 1. Search candidates by passport_number or application_id
       const { data: cand } = await supabase
         .from("candidates")

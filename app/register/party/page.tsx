@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import { PARTY_FEE } from "@/lib/constants";
 import FileUploadField from "@/components/forms/FileUploadField";
 import { notifyRegistration } from "@/lib/notify";
@@ -39,6 +39,7 @@ export default function PartyRegistrationForm() {
 
     try {
       setSubmitting(true);
+      const supabase = getSupabase();
       const { error } = await supabase.from("political_parties").insert([{
         ...form,
         status: "pending",

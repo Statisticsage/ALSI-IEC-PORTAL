@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AdminShell from "@/components/layout/AdminShell";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import { PoliticalParty, ApplicationStatus } from "@/types";
 import { APPLICATION_STATUSES } from "@/lib/constants";
 import { useAdmin } from "@/lib/useAdmin";
@@ -16,6 +16,8 @@ export default function AdminPartiesPage() {
   const [selected, setSelected] = useState<PoliticalParty | null>(null);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const supabase = getSupabase();
 
   useEffect(() => { fetchParties(); }, []);
 

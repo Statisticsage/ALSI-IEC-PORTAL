@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import { UNIVERSITIES, INDIAN_STATES } from "@/lib/constants";
 import FileUploadField from "@/components/forms/FileUploadField";
 import type { VoterFormData } from "@/types";
@@ -12,6 +12,7 @@ const INITIAL: VoterFormData = {
   passport_number: "", current_state: "",
   alsi_member_status: "active",
   passport_url: "", student_id_url: "",
+  voter_id_number: "", // Updated to use voter_id_number
 };
 
 const inp = "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#0B1F3A] focus:ring-2 focus:ring-[#0B1F3A]/10";
@@ -49,6 +50,8 @@ export default function VoterRegistrationPage() {
     try {
       setSubmitting(true);
 
+      const supabase = getSupabase();
+
       const payload = {
         ...form,
         university: finalUniversity,
@@ -59,7 +62,7 @@ export default function VoterRegistrationPage() {
 
       const { error } = await supabase.rpc("rpc_voter_status_lookup", {
         passport_number: form.passport_number,
-        voter_id: form.voter_id,
+        voter_id_number: form.voter_id_number, // Updated to use voter_id_number
       });
 
       if (error) {

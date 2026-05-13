@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import { PARTY_FEE } from "@/lib/constants";
 import FileUploadField from "./FileUploadField";
 import { PartyFormData } from "@/types";
@@ -70,7 +70,7 @@ export default function PartyRegistrationForm() {
     try {
       setSubmitting(true);
 
-      // Explicit field list — no spread to avoid sending unexpected fields
+      const supabase = getSupabase();
       const { error } = await supabase
         .from("political_parties")
         .insert([{
