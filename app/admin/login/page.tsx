@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { secureAdminLogin, clearAllStorage, detectConsoleInjection, initSecurityMonitoring, sessionManager } from "@/lib/secureAdminAuth";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -16,58 +16,36 @@ export default function AdminLoginPage() {
     setError("");
     setLoading(true);
 
-    // Clear any existing session from storage immediately
-    sessionStorage.clear();
-    localStorage.clear();
+    // Detect console injection attempts first
+    const injectionAttempt = detectConsoleInjection();
+    if (injectionAttempt) {
+      setError(" Security violation detected. Access denied.");
+      // Log security event
+      console.error('[SECURITY] Console injection attempt detected:', injectionAttempt);
+      setLoading(false);
+      return;
+    }
+
+    // Clear all storage to prevent session hijacking
+    clearAllStorage();
 
     try {
-      // ── STEP 1: Verify credentials server-side ──────────────────
-      // Returns jsonb: { valid, id, email, full_name, role, permissions }
-      const { data: result, error: rpcErr } = await supabase.rpc(
-        "verify_admin_password",
-        {
-          input_email:    email.trim().toLowerCase(),
-          input_password: password,
-        }
-      );
-
-      if (rpcErr || !result?.valid) {
-        setError("Invalid credentials. Access denied.");
-        setLoading(false);
-        return;
+      // Enhanced login with client fingerprinting
+      const result = await secureAdminLogin(email, password);
+      
+      if (result.success) {
+        // Initialize security monitoring after successful login
+        initSecurityMonitoring();
+        sessionManager.startSessionTimer();
+        router.push("/admin/dashboard");
+      } else if (result.locked) {
+        setError(" Account locked due to too many failed attempts. IEC security team notified.");
+      } else {
+        setError(result.error || "Invalid credentials. Access denied.");
       }
-
-      // ── STEP 2: Create server-side session, kill all old ones ───
-      // Every login destroys all previous sessions first.
-      const { data: token, error: sessionErr } = await supabase.rpc(
-        "create_admin_session",
-        {
-          p_admin_id:    result.id,
-          p_admin_email: result.email,
-          p_admin_role:  result.role,
-          p_ip_address:  null,
-        }
-      );
-
-      if (sessionErr || !token) {
-        setError("Session creation failed. Please try again.");
-        setLoading(false);
-        return;
-      }
-
-      // ── STEP 3: Store ONLY the token + email in sessionStorage ──
-      // NEVER store the full admin object — that's what the hacker
-      // exploited. Token is a 64-char random hex string that means
-      // nothing without the DB. Injecting it from console does nothing
-      // because it also requires a matching DB row that expires.
-      sessionStorage.setItem("iec_token", token);
-      sessionStorage.setItem("iec_email", result.email);
-
-      // ── STEP 4: Navigate to dashboard ───────────────────────────
-      router.push("/admin/dashboard");
-
-    } catch {
-      setError("System error. Please try again.");
+    } catch (err) {
+      console.error('[LOGIN] Unexpected error:', err);
+      setError("Network error. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }

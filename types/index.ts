@@ -90,6 +90,7 @@ export interface VoterFormData {
   passport_number: string;
   current_state: string;
   alsi_member_status: ALSIMemberStatus;
+  voter_id?: string;
   // document URLs — populated after upload
   passport_url: string;
   student_id_url: string;

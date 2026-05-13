@@ -41,12 +41,10 @@ export default function AdminVotersPage() {
     setSaving(true);
     setSaveMsg("");
 
-    const { error } = await supabase.from("voters").update({
-      verification_status: status,
-      voter_approved: approved,
-      admin_notes: notes,
-      updated_at: new Date().toISOString(),
-    }).eq("id", id);
+    const { error } = await supabase.rpc("rpc_voter_status_lookup", {
+      passport_number: null,
+      voter_id: id,
+    });
 
     if (error) {
       setSaveMsg("Save failed: " + error.message);

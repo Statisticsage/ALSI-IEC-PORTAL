@@ -34,7 +34,10 @@ export default function DashboardPage() {
         supabase.from("candidates").select("*", { count: "exact", head: true }).eq("status", "pending"),
         supabase.from("candidates").select("*", { count: "exact", head: true }).eq("status", "approved"),
         supabase.from("candidates").select("*", { count: "exact", head: true }).eq("status", "rejected"),
-        supabase.from("voters").select("*", { count: "exact", head: true }),
+        supabase.rpc("rpc_voter_status_lookup", {
+          passport_number: null,
+          voter_id: null,
+        }),
         supabase.from("voters").select("*", { count: "exact", head: true }).eq("voter_approved", true),
         supabase.from("political_parties").select("*", { count: "exact", head: true }),
         supabase.from("political_parties").select("*", { count: "exact", head: true }).eq("status", "approved"),

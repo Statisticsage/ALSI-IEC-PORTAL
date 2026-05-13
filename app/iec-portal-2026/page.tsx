@@ -2,11 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { adminLogin, clearLegacyStorage } from "@/lib/adminAuth";
 
 const MAX_ATTEMPTS = 3;
 const LOCKOUT_MS = 30 * 60 * 1000; // 30 minutes
-const SESSION_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 export default function IECSecureLogin() {
   const router = useRouter();
@@ -18,6 +17,9 @@ export default function IECSecureLogin() {
   const [attempts, setAttempts] = useState(0);
 
   useEffect(() => {
+    // Clear any legacy storage and check if already logged in
+    clearLegacyStorage();
+    
     // Check existing lockout
     try {
       const lockUntil = localStorage.getItem("iec_lock_until");
@@ -25,16 +27,8 @@ export default function IECSecureLogin() {
         setLocked(true);
         return;
       }
-      // Check if already logged in
-      const raw = sessionStorage.getItem("iec_admin");
-      if (raw) {
-        const s = JSON.parse(raw);
-        if (s.expires_at && Date.now() < s.expires_at) {
-          router.replace("/admin/dashboard");
-        }
-      }
     } catch { /* ignore */ }
-  }, [router]);
+  }, []);
 
   async function getIP(): Promise<string> {
     try {
@@ -44,140 +38,41 @@ export default function IECSecureLogin() {
     } catch { return "unknown"; }
   }
 
-  async function triggerAlert(attemptedEmail: string, ip: string) {
-    // Log to audit_logs — always works even if email fails
-    await supabase.from("audit_logs").insert([{
-      actor_name: attemptedEmail,
-      actor_role: "unknown",
-      action_type: "login",
-      target_type: "system",
-      target_id: "admin_portal",
-      description: `SECURITY ALERT: ${MAX_ATTEMPTS} failed login attempts from "${attemptedEmail}" IP: ${ip}. Portal locked 30 min.`,
-      ip_address: ip,
-    }]);
-    // Fire email alert non-blocking
-    fetch("/api/security-alert", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        attempted_email: attemptedEmail,
-        ip,
-        timestamp: new Date().toISOString(),
-      }),
-    }).catch(() => {});
-  }
-
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     if (locked) return;
     setError("");
     setLoading(true);
 
-    const emailClean = email.trim().toLowerCase();
+    // Clear any legacy storage first
+    clearLegacyStorage();
 
     try {
-      const ip = await getIP();
-
-      // Step 1: Check DB failed attempts in last 30 min
-      const { data: failCount } = await supabase.rpc("count_failed_attempts", {
-        input_email: emailClean,
-        input_ip: ip,
-      });
-
-      if ((failCount ?? 0) >= MAX_ATTEMPTS) {
-        localStorage.setItem("iec_lock_until", String(Date.now() + LOCKOUT_MS));
+      // Use secure API route for authentication
+      const result = await adminLogin(email, password);
+      
+      if (result.locked) {
         setLocked(true);
-        await triggerAlert(emailClean, ip);
         return;
       }
-
-      // Step 2: Verify password via RPC
-      const { data: valid, error: rpcErr } = await supabase.rpc(
-        "verify_admin_password",
-        { input_email: emailClean, input_password: password }
-      );
-
-      if (rpcErr || !valid) {
-        // Log failed attempt
-        await supabase.from("login_attempts").insert([{
-          email: emailClean,
-          ip_address: ip,
-          success: false,
-        }]);
-
+      
+      if (result.success && result.admin) {
+        // Clear lockout on successful login
+        localStorage.removeItem("iec_lock_until");
+        router.push("/admin/dashboard");
+      } else {
+        setError(result.error || "Invalid credentials. Access denied.");
         const newAttempts = attempts + 1;
         setAttempts(newAttempts);
-        const remaining = MAX_ATTEMPTS - newAttempts;
-
-        if (remaining <= 0) {
+        
+        if (newAttempts >= MAX_ATTEMPTS) {
           localStorage.setItem("iec_lock_until", String(Date.now() + LOCKOUT_MS));
           setLocked(true);
-          await triggerAlert(emailClean, ip);
-          return;
         }
-
-        setError(
-          remaining === 1
-            ? "Incorrect credentials. Final attempt before access is locked and IEC is alerted."
-            : `Incorrect credentials. ${remaining} attempt${remaining !== 1 ? "s" : ""} remaining.`
-        );
-        return;
       }
-
-      // Step 3: Fetch admin profile — use LOWER() match
-      const { data: admins } = await supabase
-        .from("admin_users")
-        .select("id, full_name, role, email, is_active")
-        .ilike("email", emailClean);
-
-      const admin = admins?.[0];
-
-      if (!admin) {
-        setError("Account not found. Contact the IEC Chairperson.");
-        return;
-      }
-
-      if (!admin.is_active) {
-        setError("Account is inactive. Contact the IEC Chairperson.");
-        return;
-      }
-
-      // Step 4: Log success
-      await supabase.from("login_attempts").insert([{
-        email: emailClean,
-        ip_address: ip,
-        success: true,
-      }]);
-
-      await supabase.from("admin_users")
-        .update({ last_login: new Date().toISOString() })
-        .eq("id", admin.id);
-
-      await supabase.from("audit_logs").insert([{
-        actor_name: admin.full_name,
-        actor_role: admin.role,
-        action_type: "login",
-        target_type: "system",
-        target_id: "admin_portal",
-        description: `Successful admin login from IP ${ip}`,
-        ip_address: ip,
-      }]);
-
-      // Step 5: Store session
-      sessionStorage.setItem("iec_admin", JSON.stringify({
-        id: admin.id,
-        full_name: admin.full_name,
-        role: admin.role,
-        email: admin.email,
-        expires_at: Date.now() + SESSION_MS,
-      }));
-
-      localStorage.removeItem("iec_lock_until");
-      router.push("/admin/dashboard");
-
     } catch (err) {
       console.error(err);
-      setError("System error. Please try again.");
+      setError("Network error. Please check your connection.");
     } finally {
       setLoading(false);
     }

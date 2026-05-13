@@ -57,7 +57,10 @@ export default function VoterRegistrationPage() {
         verification_status: "pending",
       };
 
-      const { error } = await supabase.from("voters").insert([payload]);
+      const { error } = await supabase.rpc("rpc_voter_status_lookup", {
+        passport_number: form.passport_number,
+        voter_id: form.voter_id,
+      });
 
       if (error) {
         console.error("Voter insert error:", error);

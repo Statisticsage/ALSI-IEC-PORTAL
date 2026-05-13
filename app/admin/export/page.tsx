@@ -65,7 +65,10 @@ export default function ExportCenterPage() {
     return (data as Candidate[]) ?? [];
   }
   async function fetchVoters(): Promise<Voter[]> {
-    const { data } = await supabase.from("voters").select("*").order("submitted_at", { ascending: false });
+    const { data } = await supabase.rpc("rpc_voter_status_lookup", {
+      passport_number: null,
+      voter_id: null,
+    });
     return (data as Voter[]) ?? [];
   }
   async function fetchParties(): Promise<PoliticalParty[]> {
@@ -131,7 +134,7 @@ export default function ExportCenterPage() {
       id: "full-register",
       title: "Full Election Register",
       description: "Master export — all candidates, voters, and parties in one workbook with separate sheets.",
-      icon: "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582 4-8 4s8 1.79 8 4",
+      icon: "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4-8 4s8 1.79 8 4",
       color: "slate",
       action: async () => {
         const [c, v, p] = await Promise.all([fetchCandidates(), fetchVoters(), fetchParties()]);

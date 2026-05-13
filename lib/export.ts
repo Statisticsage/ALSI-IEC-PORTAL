@@ -3,13 +3,13 @@
 // Dual destination: Supabase DB (primary) + Excel (IEC review)
 // ============================================================
 
-import * as XLSX from "xlsx";
+import * as ExcelJS from 'exceljs';
 import { Candidate, Voter, PoliticalParty, CandidatePosition } from "@/types";
 
 // -------------------------------------------------------
 // CANDIDATES EXPORT
 // -------------------------------------------------------
-export function exportCandidatesToExcel(
+export async function exportCandidatesToExcel(
   candidates: Candidate[],
   filename = "IEC_Candidates_Register"
 ) {
@@ -37,21 +37,21 @@ export function exportCandidatesToExcel(
     "Last Updated": formatDate(c.updated_at),
   }));
 
-  writeExcel(rows, "Candidates", filename);
+  await writeExcel(rows, "Candidates", filename);
 }
 
 // -------------------------------------------------------
 // APPROVED CANDIDATES ONLY
 // -------------------------------------------------------
-export function exportApprovedCandidates(candidates: Candidate[]) {
+export async function exportApprovedCandidates(candidates: Candidate[]) {
   const approved = candidates.filter((c) => c.status === "approved");
-  exportCandidatesToExcel(approved, "IEC_Approved_Candidates");
+  await exportCandidatesToExcel(approved, "IEC_Approved_Candidates");
 }
 
 // -------------------------------------------------------
 // VOTERS EXPORT
 // -------------------------------------------------------
-export function exportVotersToExcel(
+export async function exportVotersToExcel(
   voters: Voter[],
   filename = "IEC_Voter_Register"
 ) {
@@ -72,13 +72,13 @@ export function exportVotersToExcel(
     "Submitted At": formatDate(v.submitted_at),
   }));
 
-  writeExcel(rows, "Voter Register", filename);
+  await writeExcel(rows, "Voter Register", filename);
 }
 
 // -------------------------------------------------------
 // POLITICAL PARTIES EXPORT
 // -------------------------------------------------------
-export function exportPartiesToExcel(
+export async function exportPartiesToExcel(
   parties: PoliticalParty[],
   filename = "IEC_Political_Parties"
 ) {
@@ -97,13 +97,13 @@ export function exportPartiesToExcel(
     "Submitted At": formatDate(p.submitted_at),
   }));
 
-  writeExcel(rows, "Political Parties", filename);
+  await writeExcel(rows, "Political Parties", filename);
 }
 
 // -------------------------------------------------------
 // FINANCIAL TRACKING EXPORT
 // -------------------------------------------------------
-export function exportFinancialReport(candidates: Candidate[]) {
+export async function exportFinancialReport(candidates: Candidate[]) {
   const FEES: Record<string, number> = {
     President: 3200,
     "Vice President": 2800,
@@ -138,69 +138,117 @@ export function exportFinancialReport(candidates: Candidate[]) {
     "Submitted At": "",
   });
 
-  writeExcel(rows, "Financial Report", "IEC_Financial_Report");
+  await writeExcel(rows, "Financial Report", "IEC_Financial_Report");
 }
 
 // -------------------------------------------------------
 // FULL EXPORT (all sheets in one workbook)
 // -------------------------------------------------------
-export function exportFullRegister(
+export async function exportFullRegister(
   candidates: Candidate[],
   voters: Voter[],
   parties: PoliticalParty[]
 ) {
-  const wb = XLSX.utils.book_new();
+  const wb = new ExcelJS.Workbook();
 
-  appendSheet(wb, candidates.map((c, i) => ({
+  await appendSheet(wb, candidates.map((c, i) => ({
     "#": i + 1,
     "Application ID": c.application_id,
     "Full Name": c.full_name,
-    "Position": c.position_applied,
-    "University": c.university,
-    "GPA": c.gpa,
-    "Status": c.status.replace(/_/g, " ").toUpperCase(),
+    Position: c.position_applied,
+    University: c.university,
+    GPA: c.gpa,
+    Status: c.status.replace(/_/g, " ").toUpperCase(),
     "Submitted At": formatDate(c.submitted_at),
   })), "Candidates");
 
-  appendSheet(wb, voters.map((v, i) => ({
+  await appendSheet(wb, voters.map((v, i) => ({
     "#": i + 1,
     "Voter ID": v.voter_id_number || "Pending",
     "Full Name": v.full_name,
-    "University": v.university,
-    "Approved": v.voter_approved ? "YES" : "NO",
+    University: v.university,
+    Approved: v.voter_approved ? "YES" : "NO",
     "Submitted At": formatDate(v.submitted_at),
   })), "Voters");
 
-  appendSheet(wb, parties.map((p, i) => ({
+  await appendSheet(wb, parties.map((p, i) => ({
     "#": i + 1,
     "Party Name": p.party_name,
-    "Acronym": p.acronym,
-    "Status": p.status.replace(/_/g, " ").toUpperCase(),
+    Acronym: p.acronym,
+    Status: p.status.replace(/_/g, " ").toUpperCase(),
     "Submitted At": formatDate(p.submitted_at),
   })), "Political Parties");
 
   const date = new Date().toISOString().split("T")[0];
-  XLSX.writeFile(wb, `IEC_Full_Register_${date}.xlsx`);
+  
+  if (typeof window !== 'undefined') {
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `IEC_Full_Register_${date}.xlsx`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  } else {
+    await wb.xlsx.writeFile(`IEC_Full_Register_${date}.xlsx`);
+  }
 }
 
 // -------------------------------------------------------
 // INTERNAL HELPERS
 // -------------------------------------------------------
-function writeExcel(rows: object[], sheetName: string, filename: string) {
-  const wb = XLSX.utils.book_new();
-  appendSheet(wb, rows, sheetName);
+async function writeExcel(rows: object[], sheetName: string, filename: string) {
+  const wb = new ExcelJS.Workbook();
+  await appendSheet(wb, rows, sheetName);
   const date = new Date().toISOString().split("T")[0];
-  XLSX.writeFile(wb, `${filename}_${date}.xlsx`);
+  
+  // Set up response for browser download
+  if (typeof window !== 'undefined') {
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}_${date}.xlsx`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  } else {
+    // Server-side: write to file system
+    await wb.xlsx.writeFile(`${filename}_${date}.xlsx`);
+  }
 }
 
-function appendSheet(wb: XLSX.WorkBook, rows: object[], sheetName: string) {
-  const ws = XLSX.utils.json_to_sheet(rows);
-  // Auto column widths
-  const cols = Object.keys(rows[0] ?? {}).map((k) => ({
-    wch: Math.max(k.length + 2, 16),
-  }));
-  ws["!cols"] = cols;
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+async function appendSheet(wb: ExcelJS.Workbook, rows: object[], sheetName: string) {
+  const ws = wb.addWorksheet(sheetName);
+  
+  if (rows.length > 0) {
+    // Add headers
+    const headers = Object.keys(rows[0]);
+    ws.addRow(headers);
+    
+    // Add data rows
+    rows.forEach(row => {
+      ws.addRow(Object.values(row));
+    });
+    
+    // Auto-fit columns
+    ws.columns.forEach((column, index) => {
+      const header = headers[index];
+      if (header) {
+        column.width = Math.max(header.length + 2, 16);
+      }
+    });
+    
+    // Style header row
+    const headerRow = ws.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE6E6FA' }
+    };
+  }
 }
 
 function formatDate(iso: string) {
