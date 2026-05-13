@@ -1,5 +1,5 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
-import { getServerClient } from "@/lib/supabaseServer"; // FIXED: was supabaseServer
+import { supabaseServer } from "@/lib/supabaseServer"; // FIXED: was supabaseServer
 
 const COOKIE_NAME  = "iec_admin_token";
 const COOKIE_EMAIL = "iec_admin_email";
@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   try {
     const token = req.cookies.get(COOKIE_NAME)?.value;
     const email = req.cookies.get(COOKIE_EMAIL)?.value;
-    const supabase = getServerClient(); // FIXED: call the function
+    const supabase = supabaseServer; // FIXED: call the function
 
     if (token) {
       await supabase

@@ -1,5 +1,5 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
-import { getServerClient } from "@/lib/supabaseServer";
+import { supabaseServer } from "@/lib/supabaseServer";
 import { cookies } from "next/headers";
 
 async function verifySession(): Promise<boolean> {
@@ -10,7 +10,7 @@ async function verifySession(): Promise<boolean> {
 
   if (!token || !email) return false;
 
-  const { data } = await getServerClient().rpc(
+  const { data } = await supabaseServer.rpc(
     "verify_admin_session",
     {
       p_token: token,
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const db = getServerClient();
+  const db = supabaseServer;
 
   const { searchParams } = new URL(req.url);
 
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { error } = await getServerClient()
+  const { error } = await supabaseServer
     .from("audit_logs")
     .insert(await req.json());
 
@@ -106,3 +106,4 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ success: true });
 }
+

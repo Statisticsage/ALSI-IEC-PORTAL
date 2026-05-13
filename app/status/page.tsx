@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
-import { getSupabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { APPLICATION_STATUSES } from "@/lib/constants";
 
 type RecordType = "candidate" | "voter" | "party";
@@ -32,10 +32,7 @@ export default function StatusPage() {
 
     const q = query.trim().toUpperCase();
 
-    try {
-      const supabase = getSupabase();
-
-      // 1. Search candidates by passport_number or application_id
+    try {      // 1. Search candidates by passport_number or application_id
       const { data: cand } = await supabase
         .from("candidates")
         .select("application_id, full_name, status, submitted_at, updated_at, admin_notes")
@@ -142,7 +139,7 @@ export default function StatusPage() {
           </form>
 
           <p className="mt-3 text-xs text-slate-500">
-            You can search by: Passport Number · Application ID (IEC-CAND-...) · Voter ID (IEC-VOTER-...) · Party Name or Acronym
+            You can search by: Passport Number Â· Application ID (IEC-CAND-...) Â· Voter ID (IEC-VOTER-...) Â· Party Name or Acronym
           </p>
         </div>
 
@@ -187,7 +184,7 @@ export default function StatusPage() {
             {result.status === "approved" && (
               <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4">
                 <p className="text-sm font-medium text-green-800">
-                  ✓ Your application has been officially approved by the IEC.
+                  âœ“ Your application has been officially approved by the IEC.
                 </p>
               </div>
             )}
@@ -218,7 +215,7 @@ export default function StatusPage() {
                   {s.value === "under_review" && "IEC is actively reviewing your file"}
                   {s.value === "approved" && "Officially approved by IEC"}
                   {s.value === "rejected" && "Application did not meet requirements"}
-                  {s.value === "needs_correction" && "Action required — check IEC note"}
+                  {s.value === "needs_correction" && "Action required â€” check IEC note"}
                 </span>
               </div>
             ))}
@@ -245,3 +242,4 @@ function formatDate(iso: string) {
     hour: "2-digit", minute: "2-digit",
   });
 }
+

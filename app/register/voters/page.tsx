@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
-import { getSupabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { UNIVERSITIES, INDIAN_STATES } from "@/lib/constants";
 import FileUploadField from "@/components/forms/FileUploadField";
 import type { VoterFormData } from "@/types";
@@ -49,9 +49,6 @@ export default function VoterRegistrationPage() {
 
     try {
       setSubmitting(true);
-
-      const supabase = getSupabase();
-
       const payload = {
         ...form,
         university: finalUniversity,
@@ -76,7 +73,7 @@ export default function VoterRegistrationPage() {
         return setMsg({ type: "error", text: `Registration failed: ${error.message}` });
       }
 
-      // Non-blocking notification — never fails the submission
+      // Non-blocking notification â€” never fails the submission
       fetch("/api/notify-registration", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -119,12 +116,12 @@ export default function VoterRegistrationPage() {
         <div className="mb-6 rounded-2xl border border-blue-200 bg-blue-50 p-5">
           <p className="text-sm font-semibold text-[#0B1F3A]">Voter Eligibility Requirements</p>
           <ul className="mt-3 grid gap-1 text-sm text-slate-700 md:grid-cols-2">
-            <li>✓ Must be a verified ALSI member in good standing</li>
-            <li>✓ Must be currently enrolled in India</li>
-            <li>✓ Valid passport required for identity verification</li>
-            <li>✓ Valid student ID required for enrollment verification</li>
-            <li>✓ One registration per person — duplicates will be rejected</li>
-            <li>✓ IEC verification and approval required before voting</li>
+            <li>âœ“ Must be a verified ALSI member in good standing</li>
+            <li>âœ“ Must be currently enrolled in India</li>
+            <li>âœ“ Valid passport required for identity verification</li>
+            <li>âœ“ Valid student ID required for enrollment verification</li>
+            <li>âœ“ One registration per person â€” duplicates will be rejected</li>
+            <li>âœ“ IEC verification and approval required before voting</li>
           </ul>
         </div>
 
@@ -185,7 +182,7 @@ export default function VoterRegistrationPage() {
           </Section>
 
           {/* DOCUMENTS */}
-          <Section title="Verification Documents" subtitle="Both documents required. PDF, PNG, JPG accepted — max 5MB each.">
+          <Section title="Verification Documents" subtitle="Both documents required. PDF, PNG, JPG accepted â€” max 5MB each.">
             <div className="grid gap-6 md:grid-cols-2">
               <FileUploadField label="Passport Copy" bucket="voter-documents" folder="passports"
                 onUpload={(url: string) => set("passport_url", url)} />
@@ -240,3 +237,4 @@ function Field({ label, required, className, children }: { label: string; requir
     </div>
   );
 }
+

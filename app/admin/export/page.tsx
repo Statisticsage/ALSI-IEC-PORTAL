@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import AdminShell from "@/components/layout/AdminShell";
-import { getSupabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { useAdmin } from "@/lib/useAdmin";
 import {
   exportCandidatesToExcel,
@@ -42,7 +42,6 @@ export default function ExportCenterPage() {
 
       // Log export to audit
       if (admin) {
-        const supabase = getSupabase();
         await supabase.from("audit_logs").insert([{
           actor_name: admin.full_name,
           actor_role: admin.role,
@@ -60,14 +59,12 @@ export default function ExportCenterPage() {
     }
   }
 
-  // ── DATA FETCHERS ──────────────────────────────────────
+  // â”€â”€ DATA FETCHERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function fetchCandidates(): Promise<Candidate[]> {
-    const supabase = getSupabase();
     const { data } = await supabase.from("candidates").select("*").order("submitted_at", { ascending: false });
     return (data as Candidate[]) ?? [];
   }
   async function fetchVoters(): Promise<Voter[]> {
-    const supabase = getSupabase();
     const { data } = await supabase.rpc("rpc_voter_status_lookup", {
       passport_number: null,
       voter_id: null,
@@ -75,17 +72,16 @@ export default function ExportCenterPage() {
     return (data as Voter[]) ?? [];
   }
   async function fetchParties(): Promise<PoliticalParty[]> {
-    const supabase = getSupabase();
     const { data } = await supabase.from("political_parties").select("*").order("submitted_at", { ascending: false });
     return (data as PoliticalParty[]) ?? [];
   }
 
-  // ── EXPORT CARDS ───────────────────────────────────────
+  // â”€â”€ EXPORT CARDS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const EXPORTS: ExportCard[] = [
     {
       id: "all-candidates",
       title: "All Candidates",
-      description: "Complete candidate register — all statuses included. Every submission with full details.",
+      description: "Complete candidate register â€” all statuses included. Every submission with full details.",
       icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z",
       color: "blue",
       action: async () => exportCandidatesToExcel(await fetchCandidates()),
@@ -109,7 +105,7 @@ export default function ExportCenterPage() {
     {
       id: "approved-voters",
       title: "Approved Voters Only",
-      description: "Final verified voter roll — only IEC-approved voters eligible to vote.",
+      description: "Final verified voter roll â€” only IEC-approved voters eligible to vote.",
       icon: "M5 13l4 4L19 7",
       color: "green",
       action: async () => {
@@ -137,7 +133,7 @@ export default function ExportCenterPage() {
     {
       id: "full-register",
       title: "Full Election Register",
-      description: "Master export — all candidates, voters, and parties in one workbook with separate sheets.",
+      description: "Master export â€” all candidates, voters, and parties in one workbook with separate sheets.",
       icon: "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4-8 4s8 1.79 8 4",
       color: "slate",
       action: async () => {
@@ -255,11 +251,11 @@ export default function ExportCenterPage() {
         <div className="mt-3 grid gap-3 text-sm text-slate-600 md:grid-cols-3">
           <div className="flex items-start gap-2">
             <span className="mt-0.5 rounded bg-green-100 px-1.5 py-0.5 text-xs font-bold text-green-700">.xlsx</span>
-            <span>Microsoft Excel format — compatible with Google Sheets, LibreOffice, and all spreadsheet apps</span>
+            <span>Microsoft Excel format â€” compatible with Google Sheets, LibreOffice, and all spreadsheet apps</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="mt-0.5 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-bold text-blue-700">LIVE</span>
-            <span>Data is pulled directly from the database at export time — always reflects current state</span>
+            <span>Data is pulled directly from the database at export time â€” always reflects current state</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="mt-0.5 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-bold text-slate-700">LOG</span>
@@ -270,3 +266,5 @@ export default function ExportCenterPage() {
     </AdminShell>
   );
 }
+
+

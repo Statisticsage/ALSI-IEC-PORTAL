@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
-import { getSupabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { PARTY_FEE } from "@/lib/constants";
 import FileUploadField from "@/components/forms/FileUploadField";
 import { notifyRegistration } from "@/lib/notify";
@@ -39,7 +39,6 @@ export default function PartyRegistrationForm() {
 
     try {
       setSubmitting(true);
-      const supabase = getSupabase();
       const { error } = await supabase.from("political_parties").insert([{
         ...form,
         status: "pending",
@@ -116,7 +115,7 @@ export default function PartyRegistrationForm() {
       </Section>
 
       {/* SECTION 4: DOCUMENTS */}
-      <Section title="Official Documents" subtitle="All uploads required. PDF, PNG, JPG accepted — max 5MB each.">
+      <Section title="Official Documents" subtitle="All uploads required. PDF, PNG, JPG accepted â€” max 5MB each.">
         <div className="grid gap-6 md:grid-cols-2">
           <FileUploadField label="Party Symbol / Official Logo" bucket="party-documents" folder="symbols" onUpload={(url: string) => set("symbol_url", url)} />
           <FileUploadField label={`Payment Proof (INR ${PARTY_FEE.toLocaleString()})`} bucket="party-documents" folder="payments" onUpload={(url: string) => set("payment_proof_url", url)} />
@@ -182,3 +181,4 @@ function Field({ label, required, className, children }: { label: string; requir
     </div>
   );
 }
+

@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getServerClient } from "@/lib/supabaseServer"; // FIXED: was supabaseServer
+﻿import { NextRequest, NextResponse } from "next/server";
+import { supabaseServer } from "@/lib/supabaseServer"; // FIXED: was supabaseServer
 
 const COOKIE_NAME  = "iec_admin_token";
 const COOKIE_EMAIL = "iec_admin_email";
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Validate token format — 64 hex chars
+    // Validate token format â€” 64 hex chars
     if (!/^[a-f0-9]{64}$/.test(token)) {
       const res = NextResponse.json(
         { valid: false, error: "Invalid session format." },
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
       req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       "unknown";
 
-    const supabase = getServerClient(); // FIXED: call the function
+    const supabase = supabaseServer; // FIXED: call the function
 
     // FIXED: correct 3-argument signature matching the DB function
     const { data: result, error } = await supabase.rpc(

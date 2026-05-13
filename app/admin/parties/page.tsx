@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import AdminShell from "@/components/layout/AdminShell";
-import { getSupabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { PoliticalParty, ApplicationStatus } from "@/types";
 import { APPLICATION_STATUSES } from "@/lib/constants";
 import { useAdmin } from "@/lib/useAdmin";
@@ -16,9 +16,6 @@ export default function AdminPartiesPage() {
   const [selected, setSelected] = useState<PoliticalParty | null>(null);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
-
-  const supabase = getSupabase();
-
   useEffect(() => { fetchParties(); }, []);
 
   async function fetchParties() {
@@ -149,7 +146,7 @@ export default function AdminPartiesPage() {
 
             <div className="mb-6 grid gap-3 rounded-xl bg-slate-50 p-5 text-sm md:grid-cols-2">
               {[
-                ["Motto", selected.motto || "—"],
+                ["Motto", selected.motto || "â€”"],
                 ["Chairperson", selected.chairperson_name],
                 ["Secretary General", selected.secretary_general_name],
                 ["Contact Email", selected.contact_email],
@@ -178,7 +175,7 @@ export default function AdminPartiesPage() {
                   className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
                     d.url ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" : "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
                   }`}>
-                  📎 {d.label} {!d.url && "(missing)"}
+                  ðŸ“Ž {d.label} {!d.url && "(missing)"}
                 </a>
               ))}
             </div>
@@ -192,11 +189,11 @@ export default function AdminPartiesPage() {
             <div className="flex flex-wrap gap-3">
               <button onClick={() => updateStatus(selected.id, "approved")} disabled={saving}
                 className="flex-1 rounded-xl bg-green-600 py-3 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-60">
-                {saving ? "Saving..." : "✓ Approve Party"}
+                {saving ? "Saving..." : "âœ“ Approve Party"}
               </button>
               <button onClick={() => updateStatus(selected.id, "rejected")} disabled={saving}
                 className="flex-1 rounded-xl bg-red-600 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60">
-                ✗ Reject
+                âœ— Reject
               </button>
               <button onClick={() => updateStatus(selected.id, "needs_correction")} disabled={saving}
                 className="flex-1 rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60">
@@ -213,3 +210,5 @@ export default function AdminPartiesPage() {
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
+
+
