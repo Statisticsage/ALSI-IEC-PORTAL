@@ -1,8 +1,8 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import AdminShell from "@/components/layout/AdminShell";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import { AuditLog } from "@/types";
 
 const ACTION_COLORS: Record<string, string> = {
@@ -33,6 +33,7 @@ export default function AuditLogPage() {
 
   async function fetchLogs() {
     setLoading(true);
+    const supabase = getSupabase();
     let query = supabase
       .from("audit_logs")
       .select("*", { count: "exact" })
@@ -65,7 +66,7 @@ export default function AuditLogPage() {
         <div>
           <h1 className="text-2xl font-bold text-[#0B1F3A]">Audit Logs</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Complete record of all IEC administrative actions â€” {total.toLocaleString()} total entries
+            Complete record of all IEC administrative actions — {total.toLocaleString()} total entries
           </p>
         </div>
         <button
@@ -76,7 +77,7 @@ export default function AuditLogPage() {
         </button>
       </div>
 
-      {/* SECURITY ALERT BANNER â€” shows if any failed login attempts exist */}
+      {/* SECURITY ALERT BANNER — shows if any failed login attempts exist */}
       <SecurityAlertBanner />
 
       {/* FILTERS */}
@@ -145,7 +146,7 @@ export default function AuditLogPage() {
                         {formatDateTime(log.created_at)}
                       </td>
                       <td className="px-4 py-3 font-medium text-[#0B1F3A] whitespace-nowrap">
-                        {isSecurity && <span className="mr-1">ðŸš¨</span>}
+                        {isSecurity && <span className="mr-1">🚨</span>}
                         {log.actor_name}
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-500 capitalize whitespace-nowrap">
@@ -163,7 +164,7 @@ export default function AuditLogPage() {
                         <p className="truncate text-sm text-slate-600">{log.description}</p>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-slate-400 whitespace-nowrap">
-                        {log.ip_address ?? "â€”"}
+                        {log.ip_address ?? "—"}
                       </td>
                       <td className="px-4 py-3">
                         <button
@@ -184,7 +185,7 @@ export default function AuditLogPage() {
           {totalPages > 1 && (
             <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4">
               <p className="text-sm text-slate-500">
-                Page {page + 1} of {totalPages} â€” {total.toLocaleString()} total entries
+                Page {page + 1} of {totalPages} — {total.toLocaleString()} total entries
               </p>
               <div className="flex gap-2">
                 <button
@@ -227,8 +228,8 @@ export default function AuditLogPage() {
                 ["Role", selected.actor_role.replace(/_/g, " ")],
                 ["Action", selected.action_type.replace(/_/g, " ").toUpperCase()],
                 ["Target Type", selected.target_type.replace(/_/g, " ")],
-                ["Target ID", selected.target_id ?? "â€”"],
-                ["IP Address", selected.ip_address ?? "â€”"],
+                ["Target ID", selected.target_id ?? "—"],
+                ["IP Address", selected.ip_address ?? "—"],
               ].map(([label, value]) => (
                 <div key={label} className="flex justify-between gap-4 text-sm">
                   <span className="font-semibold text-slate-500">{label}</span>
@@ -248,12 +249,13 @@ export default function AuditLogPage() {
   );
 }
 
-// â”€â”€ SECURITY ALERT BANNER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── SECURITY ALERT BANNER ──────────────────────────────
 function SecurityAlertBanner() {
   const [count, setCount] = useState(0);
 
   useEffect(() => {
     async function check() {
+      const supabase = getSupabase();
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { count: c } = await supabase
         .from("login_attempts")
@@ -273,7 +275,7 @@ function SecurityAlertBanner() {
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
       </svg>
       <div>
-        <p className="text-sm font-bold text-red-700">Security Alert â€” {count} Failed Login Attempt{count !== 1 ? "s" : ""} in the last 24 hours</p>
+        <p className="text-sm font-bold text-red-700">Security Alert — {count} Failed Login Attempt{count !== 1 ? "s" : ""} in the last 24 hours</p>
         <p className="mt-1 text-sm text-red-600">
           Unauthorised access attempts have been detected on the admin portal. Review the logs below and check if alsiiec048@gmail.com received a security alert email.
         </p>
@@ -288,5 +290,7 @@ function formatDateTime(iso: string) {
     hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
 }
+
+
 
 

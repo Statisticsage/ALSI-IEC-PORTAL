@@ -1,11 +1,11 @@
-﻿"use client";
+"use client";
 
-// SAVE AS: app/admin/candidates/page.tsx  (NEW folder â€” plural)
+// SAVE AS: app/admin/candidates/page.tsx  (NEW folder — plural)
 // The old app/admin/candidate/page.tsx can be deleted after this is confirmed working
 
 import { useEffect, useState } from "react";
 import AdminShell from "@/components/layout/AdminShell";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import type { Candidate, ApplicationStatus } from "@/types";
 import { APPLICATION_STATUSES, POSITIONS } from "@/lib/constants";
 import { useAdmin } from "@/lib/useAdmin";
@@ -26,6 +26,7 @@ export default function AdminCandidatesPage() {
 
   async function fetchCandidates() {
     setLoading(true);
+    const supabase = getSupabase();
     const { data, error } = await supabase
       .from("candidates")
       .select("*")
@@ -39,6 +40,8 @@ export default function AdminCandidatesPage() {
     if (!admin) return;
     setSaving(true);
     setSaveMsg("");
+
+    const supabase = getSupabase();
     const { error } = await supabase
       .from("candidates")
       .update({ status, admin_notes: notes, updated_at: new Date().toISOString() })
@@ -58,7 +61,7 @@ export default function AdminCandidatesPage() {
         : "request_correction",
       target_type: "candidate",
       target_id: id,
-      description: `Candidate status â†’ ${status}. Notes: ${notes || "none"}`,
+      description: `Candidate status → ${status}. Notes: ${notes || "none"}`,
     }]);
 
     await fetchCandidates();
@@ -93,7 +96,7 @@ export default function AdminCandidatesPage() {
         </div>
         <button onClick={fetchCandidates}
           className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">
-          â†» Refresh
+          ↻ Refresh
         </button>
       </div>
 
@@ -148,7 +151,7 @@ export default function AdminCandidatesPage() {
                   const sc = APPLICATION_STATUSES.find(s => s.value === c.status);
                   return (
                     <tr key={c.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-mono text-xs text-slate-400">{c.application_id ?? "â€”"}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-slate-400">{c.application_id ?? "—"}</td>
                       <td className="px-4 py-3 font-semibold text-[#0B1F3A]">{c.full_name}</td>
                       <td className="px-4 py-3 text-slate-600">{c.position_applied}</td>
                       <td className="max-w-[160px] truncate px-4 py-3 text-slate-600">{c.university}</td>
@@ -187,7 +190,7 @@ export default function AdminCandidatesPage() {
               <div>
                 <p className="font-mono text-xs text-slate-400">{selected.application_id}</p>
                 <h2 className="mt-1 text-xl font-bold text-[#0B1F3A]">{selected.full_name}</h2>
-                <p className="text-sm text-slate-500">{selected.position_applied} â€” {selected.university}</p>
+                <p className="text-sm text-slate-500">{selected.position_applied} — {selected.university}</p>
               </div>
               <button onClick={() => setSelected(null)}
                 className="rounded-lg p-2 hover:bg-slate-100" aria-label="Close">
@@ -237,12 +240,12 @@ export default function AdminCandidatesPage() {
                   d.url ? (
                     <a key={d.label} href={d.url} target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700 transition hover:bg-blue-100">
-                      ðŸ“Ž {d.label}
+                      📎 {d.label}
                     </a>
                   ) : (
                     <div key={d.label}
                       className="flex items-center gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-400">
-                      âš  {d.label} â€” Missing
+                      ⚠ {d.label} — Missing
                     </div>
                   )
                 ))}
@@ -269,11 +272,11 @@ export default function AdminCandidatesPage() {
             <div className="grid grid-cols-2 gap-3">
               <button onClick={() => updateStatus(selected.id, "approved")} disabled={saving}
                 className="rounded-xl bg-green-600 py-3 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-60">
-                {saving ? "Saving..." : "âœ“ Approve"}
+                {saving ? "Saving..." : "✓ Approve"}
               </button>
               <button onClick={() => updateStatus(selected.id, "rejected")} disabled={saving}
                 className="rounded-xl bg-red-600 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60">
-                âœ— Reject
+                ✗ Reject
               </button>
               <button onClick={() => updateStatus(selected.id, "needs_correction")} disabled={saving}
                 className="rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60">
@@ -293,10 +296,12 @@ export default function AdminCandidatesPage() {
 }
 
 function fmtDate(iso: string) {
-  if (!iso) return "â€”";
+  if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-IN", {
     day: "2-digit", month: "short", year: "numeric",
   });
 }
+
+
 
 
