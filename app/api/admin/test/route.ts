@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabaseServer";
+import { NextResponse } from "next/server";
+import { getServerClient } from "@/lib/getServerClient()";
 
 export async function GET() {
   try {
@@ -8,7 +8,7 @@ export async function GET() {
     if (!hasUrl || !hasKey) {
       return NextResponse.json({ error: "Missing env vars", hasUrl, hasKey });
     }
-    const { data, error } = await supabaseServer.rpc("verify_admin_password", {
+    const { data, error } = await getServerClient().rpc("verify_admin_password", {
       input_email: "jameshbaysah013@gmail.com",
       input_password: "AILSIEC@2021"
     });
@@ -17,3 +17,4 @@ export async function GET() {
     return NextResponse.json({ crashed: true, message: err.message });
   }
 }
+

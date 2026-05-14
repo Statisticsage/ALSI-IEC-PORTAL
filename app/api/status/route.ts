@@ -1,5 +1,5 @@
-﻿import { NextRequest, NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabaseServer"
+import { NextRequest, NextResponse } from "next/server";
+import { getServerClient } from "@/lib/getServerClient()";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const db = supabaseServer;
+  const db = getServerClient();
 
   const { data: cand } = await db
     .from("candidates")
@@ -75,5 +75,6 @@ export async function GET(req: NextRequest) {
     { status: 404 }
   );
 }
+
 
 

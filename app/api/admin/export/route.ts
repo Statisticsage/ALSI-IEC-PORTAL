@@ -1,5 +1,5 @@
-﻿import { NextRequest, NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabaseServer";
+import { NextRequest, NextResponse } from "next/server";
+import { getServerClient } from "@/lib/getServerClient()";
 import { cookies } from "next/headers";
 
 async function verifySession(): Promise<{
@@ -16,7 +16,7 @@ async function verifySession(): Promise<{
     return { valid: false };
   }
 
-  const { data } = await supabaseServer.rpc(
+  const { data } = await getServerClient().rpc(
     "verify_admin_session",
     {
       p_token: token,
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const db = supabaseServer;
+  const db = getServerClient();
 
   const type =
     new URL(req.url)
@@ -87,4 +87,5 @@ export async function GET(req: NextRequest) {
     parties: p.data ?? [],
   });
 }
+
 
