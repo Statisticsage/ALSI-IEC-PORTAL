@@ -1,13 +1,13 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import AdminShell from "@/components/layout/AdminShell";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import { Voter, ApplicationStatus } from "@/types";
 import { APPLICATION_STATUSES } from "@/lib/constants";
 import { useAdmin } from "@/lib/useAdmin";
 
-// Only secretary_general has full access â€” approve, reject, view docs, review modal
+// Only secretary_general has full access — approve, reject, view docs, review modal
 const FULL_ACCESS_ROLE = "secretary_general";
 
 export default function AdminVotersPage() {
@@ -30,6 +30,7 @@ export default function AdminVotersPage() {
 
   async function fetchVoters() {
     setLoading(true);
+    const supabase = getSupabase();
     const { data, error } = await supabase
       .from("voters")
       .select("*")
@@ -52,6 +53,8 @@ export default function AdminVotersPage() {
 
     setSaving(true);
     setSaveMsg("");
+
+    const supabase = getSupabase();
     const { error } = await supabase.rpc("rpc_voter_status_lookup", {
       passport_number: null,
       voter_id: id,
@@ -76,8 +79,8 @@ export default function AdminVotersPage() {
         target_id: id,
         description: `Voter ${
           approved
-            ? "approved â€” Voter ID assigned"
-            : "status â†’ " + status
+            ? "approved — Voter ID assigned"
+            : "status → " + status
         }. Notes: ${notes || "none"}`,
       },
     ]);
@@ -137,7 +140,7 @@ export default function AdminVotersPage() {
             onClick={fetchVoters}
             className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
           >
-            â†» Refresh
+            ↻ Refresh
           </button>
         </div>
       </div>
@@ -303,7 +306,7 @@ export default function AdminVotersPage() {
               <div>
                 <p className="font-mono text-xs text-slate-400">
                   {selected.voter_id_number ??
-                    "Voter ID â€” Pending Approval"}
+                    "Voter ID — Pending Approval"}
                 </p>
 
                 <h2 className="mt-1 text-xl font-bold text-[#0B1F3A]">
@@ -311,7 +314,7 @@ export default function AdminVotersPage() {
                 </h2>
 
                 <p className="text-sm text-slate-500">
-                  {selected.university} â€” {selected.current_state}
+                  {selected.university} — {selected.current_state}
                 </p>
               </div>
 
@@ -320,7 +323,7 @@ export default function AdminVotersPage() {
                 className="rounded-lg p-2 hover:bg-slate-100"
                 aria-label="Close"
               >
-                âœ•
+                ✕
               </button>
             </div>
 
@@ -356,7 +359,7 @@ export default function AdminVotersPage() {
                   ? "Saving..."
                   : selected.voter_approved
                   ? "Already Approved"
-                  : "âœ“ Approve Voter"}
+                  : "✓ Approve Voter"}
               </button>
 
               <button
@@ -366,7 +369,7 @@ export default function AdminVotersPage() {
                 disabled={saving}
                 className="rounded-xl bg-red-600 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
               >
-                âœ— Reject
+                ✗ Reject
               </button>
             </div>
           </div>
@@ -377,7 +380,7 @@ export default function AdminVotersPage() {
 }
 
 function formatDate(iso: string) {
-  if (!iso) return "â€”";
+  if (!iso) return "—";
 
   return new Date(iso).toLocaleDateString("en-IN", {
     day: "2-digit",
@@ -387,6 +390,7 @@ function formatDate(iso: string) {
     minute: "2-digit",
   });
 }
+
 
 
 

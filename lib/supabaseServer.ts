@@ -1,21 +1,24 @@
 ﻿/**
- * lib/supabaseServer.ts — server only, never import in "use client" files
+ * lib/supabaseServer.ts — SERVER ONLY. Never import in "use client" files.
+ * Uses the service role key for full DB access bypassing RLS.
  */
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 const supabaseUrl      = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const serviceRoleKey   = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// Single shared instance — server only
-export const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
+let _adminClient: SupabaseClient | null = null;
 
-// Also export as getServerClient so both naming conventions work
-export function getServerClient() {
-  return supabaseAdmin;
+export function getServerClient(): SupabaseClient {
+  if (!_adminClient) {
+    _adminClient = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+  }
+  return _adminClient;
 }
 
-export function createServerClient() {
-  return supabaseAdmin;
-}
+// All naming conventions supported
+export const supabaseAdmin  = getServerClient();
+export const createServerClient = getServerClient;
+export const getSupabaseAdmin   = getServerClient;
